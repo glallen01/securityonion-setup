@@ -28,7 +28,7 @@ DEBUG="1"
 # Window title
 HOSTNAME=`hostname`
 #IP=`ifconfig |grep "inet addr" | awk '{print $2}' |cut -d\: -f2 |grep -v "127.0.0.1" |head -1`
-IP=$(ip addr show |awk '/inet 127.0.0.1/{next} /inet /{split($2,ip,"/"); print ip[1]}') #GLA
+IP=$(ip addr show |awk '/inet 127.0.0.1/{next} /inet /{split($2,ip,"/"); print ip[1]}')
 TITLE="Security Onion Setup ($HOSTNAME)"
 # File locations
 CONF="/etc/nsm/securityonion.conf"
@@ -43,7 +43,7 @@ IDS_ENGINE="snort"
 IDS_RULESET="ETOPEN"
 HOME_NET="192.168.0.0/16,10.0.0.0/8,172.16.0.0/12"
 #INTERFACES=`awk '/:/ {print $1}' /proc/net/dev | tr -d ':' |grep -v "^lo$" | sort`
-INTERFACES=$(awk '/lo:/{next} /:/{split($1,iface,":"); print iface[1]|"sort"}' < /proc/net/dev) #GLA
+INTERFACES=$(awk '/lo:/{next} /:/{split($1,iface,":"); print iface[1]|"sort"}' < /proc/net/dev)
 ALL_INTERFACES="$INTERFACES"
 NUM_INTERFACES=`echo $INTERFACES | wc -w`
 SNIFF_INTERFACES=`awk '/manual/ {print $2}' /etc/network/interfaces | wc -l`
@@ -171,9 +171,6 @@ EOF
 fi
 YES="Yes, Continue!"
 NO="No, Quit."
-
-echo "gla>> OUTPUT: $OUTPUT"
-
 if [ $OUTPUT == "cli" ] ; then
     dialog --title "$TITLE" --ok-label "$YES" --exit-label "$NO" --yesno "$TEXT" 0 0
 else
@@ -191,7 +188,6 @@ fi
 #########################################
 # sosetup-network
 #########################################
-echo ">>gla194: "
 if [ -z "$WRITEANSWERFILE" ]; then # Network config not yet supported when generating an answer file
 [ -f /usr/bin/sosetup-network ] && /usr/bin/sosetup-network
 ANSWER="$?"
