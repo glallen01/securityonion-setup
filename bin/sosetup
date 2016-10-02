@@ -572,9 +572,9 @@ Once you've logged into these interfaces using this initial password, you can ch
 				[ $DEBUG -eq 1 ] && echo "DEBUG: Password set."
 			else
              TEXT="Passwords didn't match\!"
-             [[ $OUTPUT == "gui" ]] \
-                 && zenity --error --title "$TITLE" --text "$TEXT"  \
-                     || dialog --title "$TITLE" --msgbox "$TEXT" 0 0 
+             [[ $OUTPUT == "cli" ]] \
+                 && dialog --title "$TITLE" --msgbox "$TEXT" 0 0 \
+                     || zenity --error --title "$TITLE" --text "$TEXT"
 			fi
 		fi
 	done
@@ -607,9 +607,9 @@ if [ $ADVANCED_SETUP -eq 1 ] && [ $SERVER -eq 1 ]; then
 		COMPRESSED="$(echo $DAYSTOKEEP | sed -e 's/[^[:digit:]]//g')"
 		if [ "$COMPRESSED" != "$DAYSTOKEEP" ] || [ x$DAYSTOKEEP = "x" ]; then
           TEXT="Invalid value! Please use integers only."
-          [[ $OUTPUT == "gui" ]] \
-              && zenity --error --title "$TITLE" --text "$TEXT"  \
-                  || dialog --title "$TITLE" --msgbox "$TEXT" 0 0 
+          [[ $OUTPUT == "cli" ]] \
+              && dialog --title "$TITLE" --msgbox "$TEXT" 0 0 \
+                  || zenity --error --title "$TITLE" --text "$TEXT"
 		else
 			DAYSTOKEEP_CONFIRMED="yes"
 		fi
@@ -635,9 +635,9 @@ if [ $ADVANCED_SETUP -eq 1 ] && [ $SERVER -eq 1 ]; then
 		 COMPRESSED="$(echo $DAYSTOREPAIR | sed -e 's/[^[:digit:]]//g')"
 		 if [ "$COMPRESSED" != "$DAYSTOREPAIR" ] || [ x$DAYSTOREPAIR = "x" ]; then
           TEXT="Invalid value! Please use integers only."
-          [[ $OUTPUT == "gui" ]] \
-              && zenity --error --title "$TITLE" --text "$TEXT"  \
-                  || dialog --title "$TITLE" --msgbox "$TEXT" 0 0
+          [[ $OUTPUT == "cli" ]] \
+              && dialog --title "$TITLE" --msgbox "$TEXT" 0 0 \
+                  || zenity --error --title "$TITLE" --text "$TEXT"
 		 else
 			  DAYSTOREPAIR_CONFIRMED="yes"
 		 fi
@@ -760,9 +760,9 @@ if [ $ADVANCED_SETUP -eq 1 ] && [ $SENSOR -eq 1 ]; then
 		COMPRESSED="$(echo $PF_RING_SLOTS | sed -e 's/[^[:digit:]]//g')"
 		if [ "$COMPRESSED" != "$PF_RING_SLOTS" ] || [ x$PF_RING_SLOTS = "x" ]; then
           TEXT="Invalid value! Please use integers only."
-          [[ $OUTPUT == "gui" ]] \
-              && zenity --error --title "$TITLE" --text "$TEXT"  \
-                  || dialog --title "$TITLE" --msgbox "$TEXT" 0 0
+          [[ $OUTPUT == "cli" ]] \
+              && dialog --title "$TITLE" --msgbox "$TEXT" 0 0 \
+                  || zenity --error --title "$TITLE" --text "$TEXT"
 		else
 			[ $DEBUG -eq 1 ] && echo "DEBUG: PF_RING min_num_slots set to $PF_RING_SLOTS."
 			PF_RING_SLOTS_CONFIRMED="yes"
@@ -843,8 +843,21 @@ Would you like to enable the IDS Engine?"
 Based on your system's number of CPU cores, it is recommended that you run $CALCD_CORES IDS engine processes per interface.\n\
 \n\
 If you need to change this setting later, change IDS_LB_PROCS in /etc/nsm/HOSTNAME-INTERFACE/sensor.conf"
-                # TODO
-                IDS_LB_PROCS=`zenity --list --radiolist --column "" --column "" $SELECTIONS --hide-header --text="$TEXT" --title="$TITLE"`
+                if [ $OUTPUT == "cli" ] ; then
+                    # need to reverse $SELECTIONS above by pairs: "FALSE eth0 TRUE eth1" => "eth0 off eth1 on"
+                    SELECTIONS=$(while read -ra ARR
+                            do
+                                LEN=${#ARR[@]}
+                                for (( I=0 ; I<$LEN ; I+=2)); do
+                                    echo -n "${ARR[I+1]} "
+                                    if [[ "${ARR[I]}" == "TRUE" ]] ; then echo -n "on " ; else echo -n "off "; fi
+                                done
+                            done <<< "$INPUT")
+                    IDS_LB_PROCS=$(dialog --no-items --title "$TITLE" --radiolist "$TEXT" 0 0 0 $SELECTIONS 3>&1 1>&2 2>&3 |sed 's/|/ /g')
+                else
+                    IDS_LB_PROCS=$(zenity --list --radiolist --column "" --column "" $SELECTIONS --hide-header --title="$TITLE" --text="$TEXT" )
+                fi
+
                 if [ "$IDS_LB_PROCS" = "" ]; then
                         [ $DEBUG -eq 1 ] && echo "DEBUG: Clicked Cancel.  Exiting."
                         exit
@@ -881,9 +894,9 @@ If you need to change this setting later, change IDS_LB_PROCS in /etc/nsm/HOSTNA
 			else
 				 if [ "$HOME_NET" == "" ]; then
                  TEXT="Please provide a value for HOME_NET!"
-                 [[ $OUTPUT == "gui" ]] \
-                     && zenity --error --title "$TITLE" --text "$TEXT"  \
-                         || dialog --title "$TITLE" --msgbox "$TEXT" 0 0
+                 [[ $OUTPUT == "cli" ]] \
+                     && dialog --title "$TITLE" --msgbox "$TEXT" 0 0 \
+                         || zenity --error --title "$TITLE" --text "$TEXT"
 				else
 					HOME_NET_CONFIRMED="yes"
 					[ $DEBUG -eq 1 ] && echo "DEBUG: Clicked OK.  Configuring HOME_NET as $HOME_NET."
@@ -1079,9 +1092,9 @@ Would you like to enable full packet capture?"
 			COMPRESSED="$(echo $PCAP_SIZE | sed -e 's/[^[:digit:]]//g')"
 			if [ "$COMPRESSED" != "$PCAP_SIZE" ] || [ x$PCAP_SIZE = "x" ]; then
             TEXT="Invalid MB value! Please use integers only."
-            [[ $OUTPUT == "gui" ]] \
-                && zenity --error --title "$TITLE" --text "$TEXT"  \
-                    || dialog --title "$TITLE" --msgbox "$TEXT" 0 0
+            [[ $OUTPUT == "cli" ]] \
+                && dialog --title "$TITLE" --msgbox "$TEXT" 0 0 \
+                    || zenity --error --title "$TITLE" --text "$TEXT"
 			else
 				[ $DEBUG -eq 1 ] && echo "DEBUG: PCAP size set to $PCAP_SIZE."
 				PCAP_SIZE_CONFIRMED="yes"
@@ -1122,9 +1135,9 @@ Would you like to enable mmap I/O?"
 			COMPRESSED="$(echo $PCAP_RING_SIZE | sed -e 's/[^[:digit:]]//g')"
 			if [ "$COMPRESSED" != "$PCAP_RING_SIZE" ] || [ x$PCAP_RING_SIZE = "x" ]; then
             TEXT="Invalid MB value! Please use integers only."
-            [[ $OUTPUT == "gui" ]] \
-                && zenity --error --title "$TITLE" --text "$TEXT"  \
-                    || dialog --title "$TITLE" --msgbox "$TEXT" 0 0
+            [[ $OUTPUT == "cli" ]] \
+                && dialog --title "$TITLE" --msgbox "$TEXT" 0 0 \
+                    || zenity --error --title "$TITLE" --text "$TEXT"
 			else
 				[ $DEBUG -eq 1 ] && echo "DEBUG: PCAP ring size set to $PCAP_RING_SIZE."
 				PCAP_RING_SIZE_CONFIRMED="yes"
@@ -1167,9 +1180,9 @@ Would you like to enable mmap I/O?"
 		CRIT_DISK_USAGE_CONFIRMED="yes" || 
           (
               TEXT="Invalid percentage! Please use integers between 0 and 100."
-              [[ $OUTPUT == "gui" ]] \
-                  && zenity --error --title "$TITLE" --text "$TEXT"  \
-                      || dialog --title "$TITLE" --msgbox "$TEXT" 0 0
+              [[ $OUTPUT == "cli" ]] \
+                  && dialog --title "$TITLE" --msgbox "$TEXT" 0 0 \
+                      || zenity --error --title "$TITLE" --text "$TEXT"
           )
 	done
 	let WARN_DISK_USAGE=${CRIT_DISK_USAGE}-10
@@ -1267,9 +1280,9 @@ Would you like to enable ELSA?"
 				[ $? = 1 ] && exit
 				if [ x$LOG_SIZE_LIMIT_GB = "x" ]; then
                 TEXT="Invalid log size limit! Please use integers greater than 0 and less than your disk size."
-                [[ $OUTPUT == "gui" ]] \
-                    && zenity --error --title "$TITLE" --text "$TEXT"  \
-                        || dialog --title "$TITLE" --msgbox "$TEXT" 0 0
+                [[ $OUTPUT == "cli" ]] \
+                    && dialog --title "$TITLE" --msgbox "$TEXT" 0 0 \
+                        || zenity --error --title "$TITLE" --text "$TEXT"
 				else
 				COMPRESSED="$(echo $LOG_SIZE_LIMIT_GB | sed -e 's/[^[:digit:]]//g')"
 				[ "$COMPRESSED" == "$LOG_SIZE_LIMIT_GB" ] && 
@@ -1278,9 +1291,9 @@ Would you like to enable ELSA?"
 				LOG_SIZE_LIMIT_CONFIRMED="yes" ||
                 (
                     TEXT="Invalid log size limit! Please use integers greater than 0 and less than your disk size."
-                    [[ $OUTPUT == "gui" ]] \
-                        && zenity --error --title "$TITLE" --text "$TEXT"  \
-                            || dialog --title "$TITLE" --msgbox "$TEXT" 0 0
+                    [[ $OUTPUT == "cli" ]] \
+                        && dialog --title "$TITLE" --msgbox "$TEXT" 0 0 \
+                            || zenity --error --title "$TITLE" --text "$TEXT"
                 )
 				fi
 			done
@@ -1330,9 +1343,9 @@ TEXT="$WRITEANSWERFILE has been saved."
 if [ "$WRITEANSWERFILE" ]; then
 	# write all the answers out
 	 save
-    [[ $OUTPUT == "gui" ]] \
-        && zenity --info --title="$TITLE" --text="$TEXT" --no-wrap \
-        || dialog --title "$TITLE" --msgbox "$TEXT" 0 0 
+    [[ $OUTPUT == "cli" ]] \
+        && dialog --title "$TITLE" --msgbox "$TEXT" 0 0 \
+            || zenity --info --title "$TITLE" --text "$TEXT"
 	exit 0
 fi
 
@@ -2486,7 +2499,7 @@ if [[ $(/usr/bin/id -u) -ne 0 && "$1" != "-w" ]]; then
     echo "Setup needs to be run as root.  Please try again using sudo."
     [[ $OUTPUT == "gui" ]] \
         && zenity --error --title "$TITLE" --text="Setup needs to be run as root.  Please try again using sudo." \
-        || dialog --title "$TITLE" --msgbox "\nSetup needs to be run as root.\nPlease try again using sudo.\n" 0 0
+            || echo "Setup needs to be run as root.  Please try again using sudo."
     exit
 fi
 
