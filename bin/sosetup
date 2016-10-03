@@ -143,21 +143,114 @@ For best performance, please ensure the machine is allocated at least 3GB of RAM
 https://github.com/Security-Onion-Solutions/security-onion/wiki/Hardware\n\n\
 Click 'No' to stop setup and adjust the amount of RAM allocated to this machine.\n\
 Otherwise, click 'Yes' to continue."
+# promptMessage "$TITLE" "$TEXT"
+
+function promptYesNoVar () {
+    : <<-END
+	Usage:
+	promptYesNoVar "$TITLE" "$TEXT" "$YES" "$NO" "NAME_OF_VAR_TO_SET"
+	NAME_OF_VAR_TO_SET="yes" or "no"
+	END
+    TITLE="$1"; shift
+    TEXT="$1"; shift
+    YES="$1"; shift
+    NO="$1"; shift
+
+    if [ $OUTPUT == "cli" ] ; then
+        dialog --title "$TITLE" --yes-label "$YES" --no-label "$NO" --yesno "$TEXT" 0 0
+    else
+        zenity --question --title="$TITLE" --text="$TEXT" --ok-label="$YES" --cancel-label="$NO" --no-wrap
+    fi
+    if [ "$?" -eq 1 ]; then
+	     eval "${1}='no'"
+	     [ $DEBUG -eq 1 ] && echo "DEBUG: Clicked No.  ${1}=${!1}"
+    else
+	     eval "${1}='yes'"
+	     [ $DEBUG -eq 1 ] && echo "DEBUG: Clicked Yes. ${1}=${!1}"
+    fi
+}
+
+function promptInput () {
+    : <<-END
+	Usage:
+	promptInput "$TITLE" "$TEXT" "DEFAULT_VAL" "NAME_OF_VAR_TO_SET"
+   or
+	promptInput "$TITLE" "$TEXT" "" "NAME_OF_VAR_TO_SET"
+	END
+    TITLE="$1"; shift
+    TEXT="$1"; shift
+    DEFAULT="$1"; shift
+
+    if [ $OUTPUT == "cli" ] ; then
+        eval "${1}=$(dialog --title "$TITLE" --inputbox "$TEXT" 0 0 "$DEFAULT" 3>&1 1>&2 2>&3)"
+    else
+        eval "${1}=$(zenity --title="$TITLE" --text="$TEXT" --entry --entry-text="$DEFAULT")"
+    fi
+
+    : <<END
+# cancel doesn't work since dialog/zenity are wrapped in an eval :(
+# commenting this section out until better ideas develop
+	 if [ $? = 1 ]; then
+		  if [ $DEBUG -eq 1 ]; then
+				echo "DEBUG: Clicked Cancel.  Exiting."  && exit 1
+		  else
+				exit 1
+		  fi
+	 fi
+END
+}
+
+function promptMessage () {
+    : <<-END
+	Usage:
+	promptMessage "$TITLE" "$TEXT"
+	END
+    TITLE="$1"; shift
+    TEXT="$1";
+    [[ $OUTPUT == "cli" ]] \
+        && dialog --title "$TITLE" --msgbox "$TEXT" 0 0 \
+            || zenity --error --title "$TITLE" --text "$TEXT"
+}
+
+function promptOKCancel () {
+    : <<-END
+	Usage:
+	promptOKCancel "$TITLE" "$TEXT" "$YES" "$NO"
+	END
+    TITLE="$1"; shift
+    TEXT="$1"; shift
+    YES="$1"; shift
+    NO="$1"
+    if [ $OUTPUT == "cli" ] ; then
+        dialog --title "$TITLE" --ok-label "$YES" --exit-label "$NO" --yesno "$TEXT" 0 0
+    else
+        zenity --question --title="$TITLE" --text="$TEXT" --ok-label="$YES" --cancel-label="$NO" --no-wrap
+    fi
+    ANSWER="$?"
+    echo "\n\nDEBUG: $TEXT"
+    if [ $ANSWER -eq 1 ]; then
+        [ $DEBUG -eq 1 ] && echo "DEBUG: ANSWER=$ANSWER, Clicked No/Cancel.  Exiting Setup."
+        exit
+    else
+        [ $DEBUG -eq 1 ] && echo "DEBUG: ANSWER=$ANSWER, Clicked Yes.  Continuing Setup."
+    fi
+}
+
 
 function ask() {
 #########################################
 # Welcome screen
 #########################################
-export TEXT=$(cat <<-EOF
+    export TEXT=$(cat <<EOF
 Welcome to Security Onion Setup!
 
 This program will allow you to configure Security Onion on $HOSTNAME.
 
 Would you like to continue?
 EOF
-       )
-if [ "$WRITEANSWERFILE" ]; then
-    export TEXT=$(cat <<EOF
+)
+    if [ "$WRITEANSWERFILE" ]; then
+        export TEXT=$(cat <<EOF
 Welcome to Security Onion Setup!
 
 Writing an answer file is still experimental, and does not
@@ -167,38 +260,26 @@ has at least one interface configured for monitoring.
 
 Would you like to continue?
 EOF
-           )
-fi
-YES="Yes, Continue!"
-NO="No, Quit."
-if [ $OUTPUT == "cli" ] ; then
-    dialog --title "$TITLE" --ok-label "$YES" --exit-label "$NO" --yesno "$TEXT" 0 0
-else
-    zenity --question --title="$TITLE" --text="$TEXT" --ok-label="$YES" --cancel-label="$NO" --no-wrap
-fi
-
-ANSWER="$?"
-if [ $ANSWER -eq 1 ]; then
-        [ $DEBUG -eq 1 ] && echo "DEBUG: Clicked No.  Exiting Setup"
-        exit
-else
-        [ $DEBUG -eq 1 ] && echo "DEBUG: Clicked Yes.  Continuing Setup."
-fi
+)
+    fi
+    YES="Yes, Continue!"
+    NO="No, Quit."
+    promptOKCancel "$TITLE" "$TEXT" "$YES" "$NO"
 
 #########################################
 # sosetup-network
 #########################################
-if [ -z "$WRITEANSWERFILE" ]; then # Network config not yet supported when generating an answer file
-[ -f /usr/bin/sosetup-network ] && /usr/bin/sosetup-network
-ANSWER="$?"
-# If there were errors in sosetup-network, then exit
-[ $ANSWER -eq 1 ] && exit
-fi
+    if [ -z "$WRITEANSWERFILE" ]; then # Network config not yet supported when generating an answer file
+        [ -f /usr/bin/sosetup-network ] && /usr/bin/sosetup-network
+        ANSWER="$?"
+        # If there were errors in sosetup-network, then exit
+        [ $ANSWER -eq 1 ] && exit
+    fi
 
 #########################################
 # Quick Setup or Advanced Setup
 #########################################
-TEXT="Evaluation Mode or Production Mode?\n\
+    TEXT="Evaluation Mode or Production Mode?\n\
 \n\
 Evaluation Mode is recommended for first-time users or standalone VMs:\n\
 - ideal for quickly evaluating Security Onion\n\
@@ -213,91 +294,78 @@ and allows you to build a distributed sensor network.  You choose:\n\
 - which IDS engine to use (Snort or Suricata)\n\
 - which IDS ruleset(s) to use (Emerging Threats, Snort VRT, or both)\n\
 - how many processes to run for Snort/Suricata/Bro"
-SETUP=""
-if [ $OUTPUT == "cli" ] ; then
-    SETUP=$(dialog --no-items --radiolist "TITLE" 0 0 0 "Evaluation Mode" on "Production Mode" off 3>&1 1>&2 2>&3)
-else
-    SETUP=$(zenity --list --radiolist --column "1" --column "2" --hide-header --title="$TITLE" \
-        TRUE "Evaluation Mode" FALSE "Production Mode" --text="$TEXT")
-fi
+    SETUP=""
+    if [ $OUTPUT == "cli" ] ; then
+        SETUP=$(dialog --no-items --radiolist "TITLE" 0 0 0 "Evaluation Mode" on "Production Mode" off 3>&1 1>&2 2>&3)
+    else
+        SETUP=$(zenity --list --radiolist --column "1" --column "2" --hide-header --title="$TITLE" \
+                       TRUE "Evaluation Mode" FALSE "Production Mode" --text="$TEXT")
+    fi
 
-echo ">> SETUP: $SETUP"
+    echo ">> SETUP: $SETUP"
 
-if [ $? = 1 ]; then
-	if [ $DEBUG -eq 1 ]; then
-		echo "DEBUG: Clicked Cancel.  Exiting." && exit 1
-	else
-		exit 1
-	fi
-fi
-[ "$SETUP" == "" ] && exit
-[ "$SETUP" == "Production Mode" ] && ADVANCED_SETUP="1" || ADVANCED_SETUP="0"
-if [ $ADVANCED_SETUP -eq 0 ]; then
-	[ $DEBUG -eq 1 ] && echo "DEBUG: Selected Evaluation Mode."
-	if [ $TOTAL_MEM -lt 3000 ]; then
-       if [ $OUTPUT == "cli" ] ; then
-           dialog --title "$TITLE" --yesno "$MEM_TEXT" 0 0
-       else
-           zenity --question --title="$TITLE" --text="$MEM_TEXT" --ok-label="$YES" --cancel-label="$NO" --no-wrap
-       fi
-		 if [ $? = 1 ]; then
-			if [ $DEBUG -eq 1 ]; then
-				echo "DEBUG: Clicked No.  Exiting." && exit 1
-			else
-				exit 1
-			fi
-		fi
-	[ $DEBUG -eq 1 ] && echo "DEBUG: Continuing, despite low RAM."
-	fi
+    if [ $? = 1 ]; then
+	     if [ $DEBUG -eq 1 ]; then
+		      echo "DEBUG: Clicked Cancel.  Exiting." && exit 1
+	     else
+		      exit 1
+	     fi
+    fi
+    [ "$SETUP" == "" ] && exit
+    [ "$SETUP" == "Production Mode" ] && ADVANCED_SETUP="1" || ADVANCED_SETUP="0"
+    if [ $ADVANCED_SETUP -eq 0 ]; then
+	     [ $DEBUG -eq 1 ] && echo "DEBUG: Selected Evaluation Mode."
+	     if [ $TOTAL_MEM -lt 3000 ]; then
+            promptOKCancel "$TITLE" "$MEM_TEXT" "$YES" "$NO"
+	         [ $DEBUG -eq 1 ] && echo "DEBUG: Continuing, despite low RAM."
+	     fi
         if [ $NUM_INTERFACES -gt 1 ]; then
-                TEXT="Which network interface should be monitored?\n\nIf you allowed Setup to configure /etc/network/interfaces, your first monitor interface is already selected."
-                INTERFACES=`awk '/:/ {print $1}' /proc/net/dev | tr -d ':' |grep -v "^lo$" | sort`
-                if grep "Security Onion" /etc/network/interfaces >/dev/null 2>&1 && grep manual /etc/network/interfaces >/dev/null 2>&1; then
+            TEXT="Which network interface should be monitored?\n\nIf you allowed Setup to configure /etc/network/interfaces, your first monitor interface is already selected."
+            INTERFACES=`awk '/:/ {print $1}' /proc/net/dev | tr -d ':' |grep -v "^lo$" | sort`
+            if grep "Security Onion" /etc/network/interfaces >/dev/null 2>&1 && grep manual /etc/network/interfaces >/dev/null 2>&1; then
 
-			CONFIGURED_INTERFACES=`awk '/manual/ {print $2}' /etc/network/interfaces | head -1`
-                        INPUT=`for i in $INTERFACES; do 
-                                        if echo $CONFIGURED_INTERFACES |grep $i >/dev/null 2>&1; then
-                                                echo -n "TRUE $i "
-                                        else
-                                                echo -n "FALSE $i "
-                                        fi
-                                done`
-                else
-                        INPUT=`for i in $INTERFACES; do echo -n "FALSE $i "; done`
-                fi
-                if [ $OUTPUT == "cli" ] ; then
-                    # need to reverse $INPUT above by pairs: "FALSE eth0 TRUE eth1" => "eth0 off eth1 on"
-                    INPUT=$(while read -ra ARR
-                            do
-                                LEN=${#ARR[@]}
-                                for (( I=0 ; I<$LEN ; I+=2)); do
-                                    Z=$I
-                                    echo -n "${ARR[I+1]} "
-                                    if [[ "${ARR[I]}" == "TRUE" ]] ; then echo -n "on " ; else echo -n "off "; fi
-                                done
-                            done <<< "$INPUT")
-                    INTERFACES=$(dialog --no-items --title "$TITLE" --radiolist "$TEXT" 0 0 0 $INPUT 3>&1 1>&2 2>&3 |sed 's/|/ /g')
-                else
-                    INTERFACES=$(zenity --list --radiolist --column "Enabled" --column "Interface" --hide-header --title="$TITLE" --text="$TEXT" $INPUT |sed 's/|/ /g')
-                fi
-
-
-		if [ "$INTERFACES" = "" ]; then
-                        [ $DEBUG -eq 1 ] && echo "DEBUG: Clicked Cancel.  Exiting."
-                        exit
-                fi
-                [ $DEBUG -eq 1 ] &&  echo "DEBUG: Selected interfaces $INTERFACES."
+			       CONFIGURED_INTERFACES=`awk '/manual/ {print $2}' /etc/network/interfaces | head -1`
+                INPUT=$(for i in $INTERFACES; do
+                            if echo $CONFIGURED_INTERFACES |grep $i >/dev/null 2>&1; then
+                                echo -n "TRUE $i "
+                            else
+                                echo -n "FALSE $i "
+                            fi
+                        done)
+            else
+                INPUT=$(for i in $INTERFACES; do echo -n "FALSE $i "; done)
+            fi
+            if [ $OUTPUT == "cli" ] ; then
+                # need to reverse $INPUT above by pairs: "FALSE eth0 TRUE eth1" => "eth0 off eth1 on"
+                INPUT=$(while read -ra ARR
+                        do
+                            LEN=${#ARR[@]}
+                            for (( I=0 ; I<$LEN ; I+=2)); do
+                                Z=$I
+                                echo -n "${ARR[I+1]} "
+                                if [[ "${ARR[I]}" == "TRUE" ]] ; then echo -n "on " ; else echo -n "off "; fi
+                            done
+                        done <<< "$INPUT")
+                INTERFACES=$(dialog --no-items --title "$TITLE" --radiolist "$TEXT" 0 0 0 $INPUT 3>&1 1>&2 2>&3 |sed 's/|/ /g')
+            else
+                INTERFACES=$(zenity --list --radiolist --column "Enabled" --column "Interface" --hide-header --title="$TITLE" --text="$TEXT" $INPUT |sed 's/|/ /g')
+            fi
+       		if [ "$INTERFACES" = "" ]; then
+                [ $DEBUG -eq 1 ] && echo "DEBUG: Clicked Cancel.  Exiting."
+                exit
+            fi
+            [ $DEBUG -eq 1 ] &&  echo "DEBUG: Selected interfaces $INTERFACES."
         fi
-	SERVER=1
-	SENSOR=1
+	     SERVER=1
+	     SENSOR=1
         ELSA="YES"
-	XPLICO_ENABLED="yes"
-	SERVERNAME="localhost"
-	SENSOR_CONFIRM_1="- Configure Snort and Bro to monitor the following interface:\n"
-	SENSOR_CONFIRM_2="$INTERFACES\n"
-else
-	[ $DEBUG -eq 1 ] && echo "DEBUG: Selected Production Mode."
-	# Ask which components to configure
+	     XPLICO_ENABLED="yes"
+	     SERVERNAME="localhost"
+	     SENSOR_CONFIRM_1="- Configure Snort and Bro to monitor the following interface:\n"
+	     SENSOR_CONFIRM_2="$INTERFACES\n"
+    else
+	     [ $DEBUG -eq 1 ] && echo "DEBUG: Selected Production Mode."
+	     # Ask which components to configure
 	TEXT="If this is the first machine in a distributed deployment, choose Server.\n\
 This machine will only run Sguil, Squert, and ELSA and will not monitor any network interfaces.\n\
 \n\
@@ -311,145 +379,73 @@ Otherwise, choose Standalone to configure both Server and Sensor components on t
    else
 	    COMPONENTS=$(zenity --height=300 --list --radiolist --column="1" --column="2" --hide-header --title="$TITLE" --text="$TEXT" TRUE Server FALSE Sensor FALSE Standalone)
    fi
-
+   
 	case $COMPONENTS in
-        Standalone)
-                [ $DEBUG -eq 1 ] && echo "DEBUG: Selected Standalone."
-		SERVER=1
-		SENSOR=1
-		SERVERNAME="localhost"
-		if [ $TOTAL_MEM -lt 3000 ];then
-          if [ $OUTPUT == "cli" ] ; then
-              dialog --title "$TITLE" --yesno "$MEM_TEXT" 0 0
-          else
-              zenity --question --title="$TITLE" --text="$MEM_TEXT" --ok-label="$YES" --cancel-label="$NO" --no-wrap
-          fi
-			if [ $? = 1 ]; then
-				if [ $DEBUG -eq 1 ]; then
-					echo "DEBUG: Clicked No.  Exiting." && exit 1
-				else
-					exit 1
-				fi
-			fi
-		[ $DEBUG -eq 1 ] && echo "DEBUG: Continuing, despite low RAM."
-		fi
-		;;
-	Server)
-                [ $DEBUG -eq 1 ] && echo "DEBUG: Selected Server."
-		SERVER=1
-		SENSOR=0
-		SERVERNAME="localhost"
-		IDS_LB_PROCS_CONFIRM=""
-		BRO_LB_PROCS_CONFIRM=""
-		if [ $TOTAL_MEM -lt 2000 ];then
-          TEXT="This machine currently has "$HR_MEM"GB of RAM allocated.\n\For best performance, please ensure the machine is allocated at least 2GB of RAM.\n\n\Consult the following link for more information:\n\https://github.com/Security-Onion-Solutions/security-onion/wiki/Hardware\n\n\
+       Standalone)
+           [ $DEBUG -eq 1 ] && echo "DEBUG: Selected Standalone."
+		     SERVER=1
+		     SENSOR=1
+		     SERVERNAME="localhost"
+		     if [ $TOTAL_MEM -lt 3000 ];then
+               promptOKCancel "$TITLE" "$MEM_TEXT" "$YES" "$NO"
+		         [ $DEBUG -eq 1 ] && echo "DEBUG: Continuing, despite low RAM."
+		     fi
+		     ;;
+	    Server)
+           [ $DEBUG -eq 1 ] && echo "DEBUG: Selected Server."
+		     SERVER=1
+		     SENSOR=0
+		     SERVERNAME="localhost"
+		     IDS_LB_PROCS_CONFIRM=""
+		     BRO_LB_PROCS_CONFIRM=""
+		     if [ $TOTAL_MEM -lt 2000 ];then
+               TEXT="This machine currently has "$HR_MEM"GB of RAM allocated.\n\For best performance, please ensure the machine is allocated at least 2GB of RAM.\n\n\Consult the following link for more information:\n\https://github.com/Security-Onion-Solutions/security-onion/wiki/Hardware\n\n\
 Click 'No' to stop setup and adjust the amount of RAM allocated to this machine.\n\
 Otherwise, click 'Yes' to continue."
-          if [ $OUTPUT == "cli" ] ; then
-              dialog --title "$TITLE" --yes-label "$YES" --no-label "$NO" --yesno "$MEM_TEXT" 0 0
-          else
-              zenity --question --title="$TITLE" --text="$MEM_TEXT" --ok-label="$YES" --cancel-label="$NO" --no-wrap
-          fi
-			if [ $? = 1 ]; then
-				if [ $DEBUG -eq 1 ]; then
-					echo "DEBUG: Clicked No.  Exiting." && exit 1
-				else
-					exit 1
-				fi
-			fi
-		[ $DEBUG -eq 1 ] && echo "DEBUG: Continuing, despite low RAM."
-		fi
-		;;
-	Sensor)
-                [ $DEBUG -eq 1 ] && echo "DEBUG: Selected Sensor."
-		SERVER=0
-		SENSOR=1
-		TEXT="What is the hostname or IP address of the master server that this sensor should connect to?"
-		SERVERNAME_CONFIRMED="no"
-		if [ $TOTAL_MEM -lt 3000 ];then
-          TEXT="This machine currently has "$HR_MEM"GB of RAM allocated.\n\For best performance, please ensure the machine is allocated at least 2GB of RAM.\n\n\Consult the following link for more information:\n\https://github.com/Security-Onion-Solutions/security-onion/wiki/Hardware\n\n\
+               promptOKCancel "$TITLE" "$MEM_TEXT" "$YES" "$NO"
+		         [ $DEBUG -eq 1 ] && echo "DEBUG: Continuing, despite low RAM."
+		     fi
+		     ;;
+	    Sensor)
+           [ $DEBUG -eq 1 ] && echo "DEBUG: Selected Sensor."
+		     SERVER=0
+		     SENSOR=1
+		     TEXT="What is the hostname or IP address of the master server that this sensor should connect to?"
+		     SERVERNAME_CONFIRMED="no"
+		     if [ $TOTAL_MEM -lt 3000 ];then
+               TEXT="This machine currently has "$HR_MEM"GB of RAM allocated.\n\For best performance, please ensure the machine is allocated at least 2GB of RAM.\n\n\Consult the following link for more information:\n\https://github.com/Security-Onion-Solutions/security-onion/wiki/Hardware\n\n\
 Click 'No' to stop setup and adjust the amount of RAM allocated to this machine.\n\
 Otherwise, click 'Yes' to continue."
-          if [ $OUTPUT == "cli" ] ; then
-              dialog --title "$TITLE" --yes-label "$YES" --no-label "$NO" --yesno "$TEXT" 0 0
-          else
-              zenity --question --title="$TITLE" --text="$TEXT" --ok-label="$YES" --cancel-label="$NO" --no-wrap
-          fi
-			if [ $? = 1 ]; then
-				if [ $DEBUG -eq 1 ]; then
-					echo "DEBUG: Clicked No.  Exiting." && exit 1
-				else
-					exit 1
-				fi
-			fi
-		[ $DEBUG -eq 1 ] && echo "DEBUG: Continuing, despite low RAM."
-		fi
-		while [ $SERVERNAME_CONFIRMED = "no" ]; do
-          if [ $OUTPUT == "cli" ] ; then
-              SERVERNAME=$(dialog --title "$TITLE" --inputbox "$TEXT" 0 0 3>&1 1>&2 2>&3)
-          else
-              SERVERNAME=$(zenity --title="$TITLE" --text="$TEXT" --entry)
-          fi
-			if [ $? = 1 ]; then
-				if [ $DEBUG -eq 1 ]; then
-					echo "DEBUG: Clicked Cancel.  Exiting."  && exit 1
-				else
-					exit 1
-				fi
-			fi
-			# Did the user enter the hostname or IP address of the local box?
-			if [ "$SERVERNAME" = "$HOSTNAME" ]; then
-				 TEXT="That is the hostname of this box\!\n\nSince you chose a sensor-only installation, the master server should be a separate box."
-             [[ $OUTPUT == "cli" ]] \
-                 && dialog --title "$TITLE" --msgbox "$TEXT" 0 0 \
-                     || zenity --error --title "$TITLE" --text "$TEXT"
-         elif [ "$SERVERNAME" = "$IP" ]; then
-             TEXT="That is the IP address of this box\!\n\nSince you chose a sensor-only installation, the master server should be a separate box."
-             [[ $OUTPUT == "cli" ]] \
-                 && dialog --title "$TITLE" --msgbox "$TEXT" 0 0 \
-                     || zenity --error --title "$TITLE" --text "$TEXT"
-			elif [ "x$SERVERNAME" = "x" ]; then
-             TEXT="No server defined\!\n\nPlease provide the hostname or IP address of a valid master server."
-             [[ $OUTPUT == "cli" ]] \
-                 && dialog --title "$TITLE" --msgbox "$TEXT" 0 0 \
-                     || zenity --error --title "$TITLE" --text "$TEXT"
-			else
-				# nc will result in OSSEC Active Response blocking the IP address
-				# nc -vz $SERVERNAME 22 -w 5 2>&1 | grep "succeeded\!" >/dev/null 2>&1 && SERVERNAME_CONFIRMED="yes"
-				# so use ssh instead:
-				ssh $SERVERNAME -o ConnectTimeout=5 -o BatchMode=yes 2>&1 | egrep 'Connection timed out|Could not resolve hostname' >/dev/null 2>&1 || SERVERNAME_CONFIRMED="yes"
-				[ $DEBUG -eq 1 ] && echo "DEBUG: Hostname/IP set to $SERVERNAME."
-				if [ $SERVERNAME_CONFIRMED = "no" ]; then
-                TEXT="Couldn't connect to $SERVERNAME on port 22\!\n\nPlease double-check hostname or IP address and\n firewall rules."
-                [[ $OUTPUT == "cli" ]] \
-                    && dialog --title "$TITLE" --msgbox "$TEXT" 0 0 \
-                        || zenity --error --title "$TITLE" --text "$TEXT"
-				fi
-			fi
-		done
-		TEXT="Please enter a username that can SSH to the master server and execute sudo."
-		SENSOR_CONFIRM_3="no"
-		while [[ $SENSOR_CONFIRM_3 = "no" ]]; do
-          if [ $OUTPUT == "cli" ] ; then
-              SSH_USERNAME=$(dialog --title "$TITLE" --inputbox "$TEXT" 0 0 3>&1 1>&2 2>&3)
-          else
-              SSH_USERNAME=$(zenity --title="$TITLE" --text="$TEXT" --entry)
-          fi
-                        if [ $? = 1 ]; then
-                                if [ $DEBUG -eq 1 ]; then
-                                        echo "DEBUG: Clicked Cancel.  Exiting."  && exit 1
-                                else
-                                        exit 1
-                                fi
-                        fi
-			if [ x$SSH_USERNAME = "x" ]; then
-             TEXT="No username defined\!\r \
-\r\ \
-Please provide a username that can SSH to the master server and execute sudo."
-             [[ $OUTPUT == "cli" ]] \
-                 && dialog --title "$TITLE" --msgbox "$TEXT" 0 0 \
-                     || zenity --error --title "$TITLE" --text "$TEXT"
-			else
+               promptOKCancel "$TITLE" "$MEM_TEXT" "$YES" "$NO"
+		         [ $DEBUG -eq 1 ] && echo "DEBUG: Continuing, despite low RAM."
+		     fi
+		     while [ $SERVERNAME_CONFIRMED = "no" ]; do
+               promptInput "$TITLE" "$TEXT" "" "SERVERNAME"
+			      # Did the user enter the hostname or IP address of the local box?
+			      if [ "$SERVERNAME" = "$HOSTNAME" ]; then
+                   promptMessage "$TITLE" "That is the hostname of this box\!\n\nSince you chose a sensor-only installation, the master server should be a separate box."
+               elif [ "$SERVERNAME" = "$IP" ]; then
+                   promptMessage "$TITLE" "That is the IP address of this box\!\n\nSince you chose a sensor-only installation, the master server should be a separate box."
+			      elif [ "x$SERVERNAME" = "x" ]; then
+                   promptMessage "$TITLE" "No server defined\!\n\nPlease provide the hostname or IP address of a valid master server."
+			      else
+				       # nc will result in OSSEC Active Response blocking the IP address
+				       # nc -vz $SERVERNAME 22 -w 5 2>&1 | grep "succeeded\!" >/dev/null 2>&1 && SERVERNAME_CONFIRMED="yes"
+				       # so use ssh instead:
+				       ssh $SERVERNAME -o ConnectTimeout=5 -o BatchMode=yes 2>&1 | egrep 'Connection timed out|Could not resolve hostname' >/dev/null 2>&1 || SERVERNAME_CONFIRMED="yes"
+				       [ $DEBUG -eq 1 ] && echo "DEBUG: Hostname/IP set to $SERVERNAME."
+				       if [ $SERVERNAME_CONFIRMED = "no" ]; then
+                       promptMessage "$TITLE" "Couldn't connect to $SERVERNAME on port 22\!\n\nPlease double-check hostname or IP address and\n firewall rules."
+				       fi
+			      fi
+		     done
+		     TEXT="Please enter a username that can SSH to the master server and execute sudo."
+		     SENSOR_CONFIRM_3="no"
+		     while [[ $SENSOR_CONFIRM_3 = "no" ]]; do
+               promptInput "$TITLE" "$TEXT" "" "SSH_USERNAME"
+			      if [ x$SSH_USERNAME = "x" ]; then
+                   promptMessage "$TITLE" "No username defined\!\n\nPlease provide a username that can SSH to the master server and execute sudo."
+			      else
 				[ $DEBUG -eq 1 ] && echo "DEBUG: SSH username set."
 				SENSOR_CONFIRM_3="- Configure the sensors to report to $SERVERNAME.\n"
 			fi
@@ -495,30 +491,16 @@ fi
 if [ $SERVER -eq 1 ]; then
 	USERNAME_CONFIRMED="no"
 	while [ $USERNAME_CONFIRMED = "no" ]; do
-		TEXT="What would you like your Sguil username to be?\n\nThis will be used when logging into Sguil, Squert, and ELSA.\n\nPlease use alphanumeric characters only."
-      if [ $OUTPUT == "cli" ] ; then
-		    SGUIL_CLIENT_USERNAME=$(dialog --title "$TITLE" --inputbox "$TEXT" 0 0 3>&1 1>&2 2>&3)
-      else
-		    SGUIL_CLIENT_USERNAME=$(zenity --title="$TITLE" --text="$TEXT" --entry)
-      fi
-
-		if [ $? = 1 ]; then
-			if [ $DEBUG -eq 1 ]; then
-				echo "DEBUG: Clicked Cancel. Exiting." && exit 1
-			else
-				exit 1
-			fi
-		fi
-		COMPRESSED="$(echo $SGUIL_CLIENT_USERNAME | sed -e 's/[^[:alnum:]]//g')"
-		if [ "$COMPRESSED" != "$SGUIL_CLIENT_USERNAME" ] || [ x$SGUIL_CLIENT_USERNAME = "x" ] ; then
-          TEXT="Invalid username\! \n\nPlease use alphanumeric characters only."
-          [[ $OUTPUT == "cli" ]] \
-              && dialog --title "$TITLE" --msgbox "$TEXT" 0 0 \
-                  || zenity --error --title "$TITLE" --text "$TEXT"
-		else
-	    		USERNAME_CONFIRMED="yes"
-			[ $DEBUG -eq 1 ] && echo "DEBUG: Sguil username set."
-		fi
+		 TEXT="What would you like your Sguil username to be?\n\nThis will be used when logging into Sguil, Squert, and ELSA.\n\nPlease use alphanumeric characters only."
+       promptInput "$TITLE" "$TEXT" "" "SGUIL_CLIENT_USERNAME"
+		 COMPRESSED="$(echo $SGUIL_CLIENT_USERNAME | sed -e 's/[^[:alnum:]]//g')"
+		 if [ "$COMPRESSED" != "$SGUIL_CLIENT_USERNAME" ] || [ x$SGUIL_CLIENT_USERNAME = "x" ] ; then
+           TEXT="Invalid username\! \n\nPlease use alphanumeric characters only."
+           promptMessage "$TITLE" "$TEXT"
+		 else
+	    	  USERNAME_CONFIRMED="yes"
+			  [ $DEBUG -eq 1 ] && echo "DEBUG: Sguil username set."
+		 fi
 	done
 fi
 
@@ -549,10 +531,7 @@ Once you've logged into these interfaces using this initial password, you can ch
 		fi
 	   if [ "${#SGUIL_CLIENT_PASSWORD_1}" -lt "6" ]; then
           TEXT="Password must be at least 6 characters\!"
-          [[ $OUTPUT == "cli" ]] \
-              && dialog --title "$TITLE" --msgbox "$TEXT" 0 0 \
-                  || zenity --error --title "$TITLE" --text "$TEXT"
-
+          promptMessage "$TITLE" "$TEXT"
 		else
 			TEXT="Please confirm what you would like to set your password to."
          if [ $OUTPUT == "cli" ] ; then
@@ -572,9 +551,7 @@ Once you've logged into these interfaces using this initial password, you can ch
 				[ $DEBUG -eq 1 ] && echo "DEBUG: Password set."
 			else
              TEXT="Passwords didn't match\!"
-             [[ $OUTPUT == "cli" ]] \
-                 && dialog --title "$TITLE" --msgbox "$TEXT" 0 0 \
-                     || zenity --error --title "$TITLE" --text "$TEXT"
+             promptMessage "$TITLE" "$TEXT"
 			fi
 		fi
 	done
@@ -591,25 +568,12 @@ if [ $ADVANCED_SETUP -eq 1 ] && [ $SERVER -eq 1 ]; then
 	# Ask for DAYSTOKEEP        
 	DAYSTOKEEP_CONFIRMED="no"
 	while [ $DAYSTOKEEP_CONFIRMED = "no" ]; do
-	   TEXT="How many days of data do you want to keep in your Sguil database?\n\nThis includes things like IDS alerts, PADS events, and PRADS session data.\n\nIf you need to change this later, you can change DAYSTOKEEP in /etc/nsm/securityonion.conf.\n\nPlease enter an integer.  The default is 30 days."
-      if [ $OUTPUT == "cli" ] ; then
-          DAYSTOKEEP=$(dialog --title "$TITLE" --inputbox "$TEXT" 0 0 "30" 3>&1 1>&2 2>&3)
-      else
-		    DAYSTOKEEP=$(zenity --entry --title "$TITLE" --text="$TEXT" --entry-text=30)
-      fi
-		if [ $? = 1 ]; then
-			if [ $DEBUG -eq 1 ]; then
-				echo "DEBUG: Clicked Cancel.  Exiting." && exit 1
-			else
-				exit 1
-			fi
-		fi
+	    TEXT="How many days of data do you want to keep in your Sguil database?\n\nThis includes things like IDS alerts, PADS events, and PRADS session data.\n\nIf you need to change this later, you can change DAYSTOKEEP in /etc/nsm/securityonion.conf.\n\nPlease enter an integer.  The default is 30 days."
+       promptInput "$TITLE" "$TEXT" "30" "DAYSTOKEEP"
 		COMPRESSED="$(echo $DAYSTOKEEP | sed -e 's/[^[:digit:]]//g')"
 		if [ "$COMPRESSED" != "$DAYSTOKEEP" ] || [ x$DAYSTOKEEP = "x" ]; then
           TEXT="Invalid value! Please use integers only."
-          [[ $OUTPUT == "cli" ]] \
-              && dialog --title "$TITLE" --msgbox "$TEXT" 0 0 \
-                  || zenity --error --title "$TITLE" --text "$TEXT"
+          promptMessage "$TITLE" "$TEXT"
 		else
 			DAYSTOKEEP_CONFIRMED="yes"
 		fi
@@ -619,25 +583,11 @@ if [ $ADVANCED_SETUP -eq 1 ] && [ $SERVER -eq 1 ]; then
 	DAYSTOREPAIR_CONFIRMED="no"
 	while [ $DAYSTOREPAIR_CONFIRMED = "no" ]; do
        TEXT="How many days of data do you want to repair in your Sguil database?\n\nA daily cronjob stops Sguil, repairs the MySQL tables for the last X days, and then starts Sguil back up.\n\nIf you choose a higher value, Sguil will be down for longer.\n\nIf you need to change this later, you can change DAYSTOREPAIR in /etc/nsm/securityonion.conf.\n\nPlease enter an integer.  The default is 7 days."
-       if [ $OUTPUT == "cli" ] ; then
-           DAYSTOREPAIR=$(dialog --title "$TITLE" --inputbox "$TEXT" 0 0 "7" 3>&1 1>&2 2>&3)
-       else
-		     DAYSTOREPAIR=$(zenity --entry --title "$TITLE" --text="$TEXT" --entry-text=7)
-       fi
-
-		 if [ $? = 1 ];then
-			  if [ $DEBUG -eq 1 ];then
-				   echo "DEBUG: Clicked Cancel.  Exiting." && exit 1
-			  else
-				   exit 1
-			  fi
-		 fi
+       promptInput "$TITLE" "$TEXT" "7" "DAYSTOREPAIR"
 		 COMPRESSED="$(echo $DAYSTOREPAIR | sed -e 's/[^[:digit:]]//g')"
 		 if [ "$COMPRESSED" != "$DAYSTOREPAIR" ] || [ x$DAYSTOREPAIR = "x" ]; then
           TEXT="Invalid value! Please use integers only."
-          [[ $OUTPUT == "cli" ]] \
-              && dialog --title "$TITLE" --msgbox "$TEXT" 0 0 \
-                  || zenity --error --title "$TITLE" --text "$TEXT"
+          promptMessage "$TITLE" "$TEXT"
 		 else
 			  DAYSTOREPAIR_CONFIRMED="yes"
 		 fi
@@ -680,23 +630,14 @@ if [ $ADVANCED_SETUP -eq 1 ] && [ $SERVER -eq 1 ]; then
 	ETPRO)
 		[ $DEBUG -eq 1 ] && echo "DEBUG: Selecting ETPRO ruleset." 
 		TEXT="Please enter your Emerging Threats Pro oinkcode.\n\nIf you don't already have one, you can purchase one from http://www.emergingthreatspro.com/."
-      if [ $OUTPUT == "cli" ] ; then
-          OINKCODE=$(dialog --title "$TITLE" --inputbox "$TEXT" 0 0 3>&1 1>&2 2>&3)
-      else
-          OINKCODE=$(zenity --title "$TITLE" --entry --text="$TEXT")
-      fi
-
+      promptInput "$TITLE" "$TEXT" "" "OINKCODE"
 		[ $DEBUG -eq 1 ] && echo "DEBUG: Entered ETPRO oinkcode $OINKCODE"
 		IDS_RULESET_ACTION="- Download ETPRO ruleset using oinkcode $OINKCODE.\n"
 		;;
 	VRT)
 		[ $DEBUG -eq 1 ] && echo "DEBUG: Selecting Snort VRT ruleset only and setting a VRT policy."
 		TEXT="Please enter your Snort VRT oinkcode.\n\nIf you don't already have one, you can obtain one from http://www.snort.org/."
-      if [ $OUTPUT == "cli" ] ; then
-          OINKCODE=$(dialog --title "$TITLE" --inputbox "$TEXT" 0 0 3>&1 1>&2 2>&3)
-      else
-          OINKCODE=$(zenity --title "$TITLE" --entry --text="$TEXT")
-      fi
+      promptInput "$TITLE" "$TEXT" "" "OINKCODE"
 		[ $DEBUG -eq 1 ] && echo "DEBUG: Entered Snort VRT oinkcode $OINKCODE"
 	   TEXT="Please choose a VRT policy."
       if [ $OUTPUT == "cli" ] ; then
@@ -717,11 +658,7 @@ if [ $ADVANCED_SETUP -eq 1 ] && [ $SERVER -eq 1 ]; then
 	VRTET)
 		[ $DEBUG -eq 1 ] && echo "DEBUG: Selecting Snort VRT and Emerging Threats NoGPL ruleset."
 		TEXT="Please enter your Snort VRT oinkcode.\n\nIf you don't already have one, you can obtain one from http://www.snort.org/."
-      if [ $OUTPUT == "cli" ] ; then
-          OINKCODE=$(dialog --title "$TITLE" --inputbox "$TEXT" 0 0 3>&1 1>&2 2>&3)
-      else
-          OINKCODE=$(zenity --title "$TITLE" --entry --text="$TEXT")
-      fi
+      promptInput "$TITLE" "$TEXT" "" "OINKCODE"
 		[ $DEBUG -eq 1 ] && echo "DEBUG: Entered Snort VRT oinkcode $OINKCODE"
 		IDS_RULESET_ACTION="- Download the Snort VRT ruleset using oinkcode $OINKCODE.\n- Download the Emerging Threats NoGPL ruleset.\n"
 		;;
@@ -744,25 +681,11 @@ if [ $ADVANCED_SETUP -eq 1 ] && [ $SENSOR -eq 1 ]; then
 	PF_RING_SLOTS_CONFIRMED="no"
 	while [ $PF_RING_SLOTS_CONFIRMED = "no" ]; do
        TEXT="What would you like to set PF__RING min__num__slots to?\n\nThe default is 4096.  For busy networks, you may want to increase this to a higher number like 65534.\n\nIf you need to change this later, you can modify /etc/modprobe.d/pf__ring.conf and reload the pf_ring module."
-       if [ $OUTPUT == "cli" ] ; then
-           PF_RING_SLOTS=$(dialog --title "$TITLE" --inputbox "$TEXT" 0 0 "4096" 3>&1 1>&2 2>&3)
-       else
-           PF_RING_SLOTS=$(zenity --entry --title "$TITLE" --text="$TEXT" --entry-text=4096)
-       fi
-
-		if [ $? = 1 ]; then
-			if [ $DEBUG -eq 1 ]; then
-				echo "DEBUG: Clicked Cancel.  Exiting." && exit 1
-			else
-				exit 1
-			fi
-		fi
+       promptInput "$TITLE" "$TEXT" "4096" "PF_RING_SLOTS"
 		COMPRESSED="$(echo $PF_RING_SLOTS | sed -e 's/[^[:digit:]]//g')"
 		if [ "$COMPRESSED" != "$PF_RING_SLOTS" ] || [ x$PF_RING_SLOTS = "x" ]; then
           TEXT="Invalid value! Please use integers only."
-          [[ $OUTPUT == "cli" ]] \
-              && dialog --title "$TITLE" --msgbox "$TEXT" 0 0 \
-                  || zenity --error --title "$TITLE" --text "$TEXT"
+          promptMessage "$TITLE" "$TEXT"
 		else
 			[ $DEBUG -eq 1 ] && echo "DEBUG: PF_RING min_num_slots set to $PF_RING_SLOTS."
 			PF_RING_SLOTS_CONFIRMED="yes"
@@ -837,86 +760,80 @@ Would you like to enable the IDS Engine?"
 	fi
 
 	# IDS Engine Procs
-        if [ "$IDS_ENGINE_ENABLED" == "yes" ] && [ "$CALCD_CORES" -gt 1 ] && [ "$CUSTOM" -eq 1 ]; then
-                TEXT="How many IDS engine processes would you like to run?\n\
+   if [ "$IDS_ENGINE_ENABLED" == "yes" ] && [ "$CALCD_CORES" -gt 1 ] && [ "$CUSTOM" -eq 1 ]; then
+       TEXT="How many IDS engine processes would you like to run?\n\
 \n\
 Based on your system's number of CPU cores, it is recommended that you run $CALCD_CORES IDS engine processes per interface.\n\
 \n\
 If you need to change this setting later, change IDS_LB_PROCS in /etc/nsm/HOSTNAME-INTERFACE/sensor.conf"
-                if [ $OUTPUT == "cli" ] ; then
-                    # need to reverse $SELECTIONS above by pairs: "FALSE eth0 TRUE eth1" => "eth0 off eth1 on"
-                    SELECTIONS=$(while read -ra ARR
-                            do
-                                LEN=${#ARR[@]}
-                                for (( I=0 ; I<$LEN ; I+=2)); do
-                                    echo -n "${ARR[I+1]} "
-                                    if [[ "${ARR[I]}" == "TRUE" ]] ; then echo -n "on " ; else echo -n "off "; fi
-                                done
-                            done <<< "$INPUT")
-                    IDS_LB_PROCS=$(dialog --no-items --title "$TITLE" --radiolist "$TEXT" 0 0 0 $SELECTIONS 3>&1 1>&2 2>&3 |sed 's/|/ /g')
-                else
-                    IDS_LB_PROCS=$(zenity --list --radiolist --column "" --column "" $SELECTIONS --hide-header --title="$TITLE" --text="$TEXT" )
-                fi
+       if [ $OUTPUT == "cli" ] ; then
+           # need to reverse $SELECTIONS above by pairs: "FALSE eth0 TRUE eth1" => "eth0 off eth1 on"
+           SELECTIONS=$(while read -ra ARR
+                        do
+                            LEN=${#ARR[@]}
+                            for (( I=0 ; I<$LEN ; I+=2)); do
+                                echo -n "${ARR[I+1]} "
+                                if [[ "${ARR[I]}" == "TRUE" ]] ; then echo -n "on " ; else echo -n "off "; fi
+                            done
+                        done <<< "$INPUT")
+           IDS_LB_PROCS=$(dialog --no-items --title "$TITLE" --radiolist "$TEXT" 0 0 0 $SELECTIONS 3>&1 1>&2 2>&3 |sed 's/|/ /g')
+       else
+           IDS_LB_PROCS=$(zenity --list --radiolist --column "" --column "" $SELECTIONS --hide-header --title="$TITLE" --text="$TEXT" )
+       fi
 
-                if [ "$IDS_LB_PROCS" = "" ]; then
-                        [ $DEBUG -eq 1 ] && echo "DEBUG: Clicked Cancel.  Exiting."
-                        exit
-                fi
-		if [ "$CALCD_CORES" -gt 1 ]; then
-			IDS_LB_PROCS_CONFIRM="- Run $IDS_LB_PROCS load-balanced IDS engine processes per interface.\n"
-                else
-			IDS_LB_PROCS=1
-			IDS_LB_PROCS_CONFIRM="- Run a a single IDS engine process per interface.\n"
-                fi
-        else
-		IDS_LB_PROCS=$CALCD_CORES
-                if [ "$CALCD_CORES" -gt 1 ]; then
-			IDS_LB_PROCS_CONFIRM="- Run $CALCD_CORES load-balanced IDS engine processes per interface.\n"
-                else
-			IDS_LB_PROCS=1
-			IDS_LB_PROCS_CONFIRM="- Run a single IDS engine process per interface.\n"
-                fi
+       if [ "$IDS_LB_PROCS" = "" ]; then
+           [ $DEBUG -eq 1 ] && echo "DEBUG: Clicked Cancel.  Exiting."
+           exit
+       fi
+		 if [ "$CALCD_CORES" -gt 1 ]; then
+			  IDS_LB_PROCS_CONFIRM="- Run $IDS_LB_PROCS load-balanced IDS engine processes per interface.\n"
+       else
+			  IDS_LB_PROCS=1
+			  IDS_LB_PROCS_CONFIRM="- Run a a single IDS engine process per interface.\n"
+       fi
+   else
+		 IDS_LB_PROCS=$CALCD_CORES
+       if [ "$CALCD_CORES" -gt 1 ]; then
+			  IDS_LB_PROCS_CONFIRM="- Run $CALCD_CORES load-balanced IDS engine processes per interface.\n"
+       else
+			  IDS_LB_PROCS=1
+			  IDS_LB_PROCS_CONFIRM="- Run a single IDS engine process per interface.\n"
+       fi
 	fi
 	# Ask if user would like to configure a custom HOME_NET
 	if [ "$IDS_ENGINE_ENABLED" == "yes" ]; then
-		HOME_NET_CONFIRMED="no"
-		while [ "$HOME_NET_CONFIRMED" == "no" ];do
-			TEXT="What would you like to configure HOME__NET as?\n\nAdd a comma (no space) after each address range.\n\nEx. 192.168.0.0/16,10.0.0.0/8,172.16.0.0/12"
-         if [ $OUTPUT == "cli" ] ; then
-             HOME_NET=$(dialog --title "$TITLE" --inputbox "$TEXT" 0 0 "$HOME_NET" 3>&1 1>&2 2>&3)
-         else
-			    HOME_NET=$(zenity --title="$TITLE" --text="$TEXT" --entry --entry-text="$HOME_NET")
-         fi
-			ANSWER="$?"
-			if [ $ANSWER -eq 1 ]; then
-				[ $DEBUG -eq 1 ] && echo "DEBUG: Clicked Cancel.  Exiting Setup."
-				exit 1
-			else
-				 if [ "$HOME_NET" == "" ]; then
-                 TEXT="Please provide a value for HOME_NET!"
-                 [[ $OUTPUT == "cli" ]] \
-                     && dialog --title "$TITLE" --msgbox "$TEXT" 0 0 \
-                         || zenity --error --title "$TITLE" --text "$TEXT"
-				else
-					HOME_NET_CONFIRMED="yes"
-					[ $DEBUG -eq 1 ] && echo "DEBUG: Clicked OK.  Configuring HOME_NET as $HOME_NET."
-				fi
-			fi
-		done
+		 HOME_NET_CONFIRMED="no"
+		 while [ "$HOME_NET_CONFIRMED" == "no" ];do
+			  TEXT="What would you like to configure HOME__NET as?\n\nAdd a comma (no space) after each address range.\n\nEx. 192.168.0.0/16,10.0.0.0/8,172.16.0.0/12"
+           promptInput "$TITLE" "$TEXT" "$HOME_NET" "HOME_NET"
+			  ANSWER="$?"
+			  if [ $ANSWER -eq 1 ]; then
+				   [ $DEBUG -eq 1 ] && echo "DEBUG: Clicked Cancel.  Exiting Setup."
+				   exit 1
+			  else
+				   if [ "$HOME_NET" == "" ]; then
+                   TEXT="Please provide a value for HOME_NET!"
+                   promptMessage "$TITLE" "$TEXT"
+				   else
+					    HOME_NET_CONFIRMED="yes"
+					    [ $DEBUG -eq 1 ] && echo "DEBUG: Clicked OK.  Configuring HOME_NET as $HOME_NET."
+				   fi
+			  fi
+		 done
 	fi
 	IDS_HOME_NET_CONFIRM="- Configure IDS HOME_NET as: $HOME_NET.\n"
 	if [ $CUSTOM -eq 1 ]; then
-	# Bro
-	TEXT="Bro listens on the chosen interfaces and writes protocol logs.\n\
+	    # Bro
+	    TEXT="Bro listens on the chosen interfaces and writes protocol logs.\n\
 \n\
 Would you like to enable Bro?"
-	YES="Yes, enable Bro!"
-	NO="No, disable Bro."
-   if [ $OUTPUT == "cli" ] ; then
-       dialog --title "$TITLE" --yes-label "$YES" --no-label "$NO" --yesno "$TEXT" 0 0
-   else
-       zenity --question --title="$TITLE" --text="$TEXT" --ok-label="$YES" --cancel-label="$NO" --no-wrap
-   fi
+	    YES="Yes, enable Bro!"
+	    NO="No, disable Bro."
+       if [ $OUTPUT == "cli" ] ; then
+           dialog --title "$TITLE" --yes-label "$YES" --no-label "$NO" --yesno "$TEXT" 0 0
+       else
+           zenity --question --title="$TITLE" --text="$TEXT" --ok-label="$YES" --cancel-label="$NO" --no-wrap
+       fi
 	ANSWER="$?"
 	if [ $ANSWER -eq 1 ]; then
 		[ $DEBUG -eq 1 ] && echo "DEBUG: Clicked No.  Disabling Bro."
@@ -931,19 +848,7 @@ Would you like to enable Bro?"
 		TEXT="Bro can extract files (EXEs by default) from your network traffic.\n\nIf enabled, EXEs will be stored in /nsm/bro/extracted/.\n\nWould you like to enable file extraction?"
 		YES="Yes, enable file extraction!"
 		NO="No, disable file extraction."
-		if [ $OUTPUT == "cli" ] ; then
-          dialog --title "$TITLE" --yes-label "$YES" --no-label "$NO" --yesno "$TEXT" 0 0
-      else
-          zenity --question --title="$TITLE" --text="$TEXT" --ok-label="$YES" --cancel-label="$NO" --no-wrap
-      fi
-		ANSWER="$?"
-		if [ $ANSWER -eq 1 ]; then
-			[ $DEBUG -eq 1 ] && echo "DEBUG: Clicked No.  Disabling file extraction"
-			EXTRACT_FILES="no"
-		else
-			[ $DEBUG -eq 1 ] && echo "DEBUG: Clicked Yes.  Enabling file extraction."
-			EXTRACT_FILES="yes"
-		fi
+      promptYesNoVar "$TITLE" "$TEXT" "$YES" "$NO" "EXTRACT_FILES"
 	fi
 	fi
 
@@ -986,19 +891,7 @@ you may want to disable http_agent to avoid duplication of effort.\n\
 Would you like to enable http_agent?"
 		YES="Yes, enable http__agent!"
 		NO="No, disable http__agent."
-		if [ $OUTPUT == "cli" ] ; then
-          dialog --title "$TITLE" --yes-label "$YES" --no-label "$NO" --yesno "$TEXT" 0 0
-      else
-          zenity --question --title="$TITLE" --text="$TEXT" --ok-label="$YES" --cancel-label="$NO" --no-wrap
-      fi
-		ANSWER="$?"
-		if [ $ANSWER -eq 1 ]; then
-			[ $DEBUG -eq 1 ] && echo "DEBUG: Clicked No.  Disabling http_agent."
-			HTTP_AGENT_ENABLED="no"
-		else
-			[ $DEBUG -eq 1 ] && echo "DEBUG: Clicked Yes.  Enabling http_agent."
-			HTTP_AGENT_ENABLED="yes"
-		fi
+      promptYesNoVar "$TITLE" "$TEXT" "$YES" "$NO" "HTTP_AGENT_ENABLED"
 	fi
 
 	# Argus
@@ -1010,19 +903,7 @@ you may want to disable Argus to avoid duplication of effort.\n\
 Would you like to enable Argus?"
 	YES="Yes, enable Argus!"
 	NO="No, disable Argus."
-		if [ $OUTPUT == "cli" ] ; then
-          dialog --title "$TITLE" --yes-label "$YES" --no-label "$NO" --yesno "$TEXT" 0 0
-      else
-          zenity --question --title="$TITLE" --text="$TEXT" --ok-label="$YES" --cancel-label="$NO" --no-wrap
-      fi
-	ANSWER="$?"
-	if [ $ANSWER -eq 1 ]; then
-		[ $DEBUG -eq 1 ] && echo "DEBUG: Clicked No.  Disabling Argus."
-		ARGUS_ENABLED="no"
-	else
-		[ $DEBUG -eq 1 ] && echo "DEBUG: Clicked Yes.  Enabling Argus."
-		ARGUS_ENABLED="yes"
-	fi
+   promptYesNoVar "$TITLE" "$TEXT" "$YES" "$NO" "ARGUS_ENABLED"
 
 	# Prads
 	TEXT="Prads listens on the chosen interfaces and provides session and asset data for Sguil.\n\
@@ -1034,11 +915,11 @@ you may want to disable Prads to avoid duplication of effort.\n\
 Would you like to enable Prads?"
 	YES="Yes, enable Prads!"
 	NO="No, disable Prads."
-		if [ $OUTPUT == "cli" ] ; then
-          dialog --title "$TITLE" --yes-label "$YES" --no-label "$NO" --yesno "$TEXT" 0 0
-      else
-          zenity --question --title="$TITLE" --text="$TEXT" --ok-label="$YES" --cancel-label="$NO" --no-wrap
-      fi
+	if [ $OUTPUT == "cli" ] ; then
+       dialog --title "$TITLE" --yes-label "$YES" --no-label "$NO" --yesno "$TEXT" 0 0
+   else
+       zenity --question --title="$TITLE" --text="$TEXT" --ok-label="$YES" --cancel-label="$NO" --no-wrap
+   fi
 	ANSWER="$?"
 	if [ $ANSWER -eq 1 ]; then
 		[ $DEBUG -eq 1 ] && echo "DEBUG: Clicked No.  Disabling Prads."
@@ -1083,18 +964,12 @@ Would you like to enable full packet capture?"
 		PCAP_SIZE_CONFIRMED="no"
 		while [ $PCAP_SIZE_CONFIRMED = "no" ]; do
           TEXT="How big do you want your pcap files to be?\n\nPlease enter an integer in Megabytes (MB).  The default is 150 MB."
-          if [ $OUTPUT == "cli" ] ; then
-              PCAP_SIZE=$(dialog --title "$TITLE" --inputbox "$TEXT" 0 0 "150" 3>&1 1>&2 2>&3)
-          else
-			     PCAP_SIZE=$(zenity --title="$TITLE" --text="$TEXT" --entry --entry-text="150")
-          fi
+          promptInput "$TITLE" "$TEXT" "150" "PCAP_SIZE"
 			[ $? = 1 ] && exit
 			COMPRESSED="$(echo $PCAP_SIZE | sed -e 's/[^[:digit:]]//g')"
 			if [ "$COMPRESSED" != "$PCAP_SIZE" ] || [ x$PCAP_SIZE = "x" ]; then
             TEXT="Invalid MB value! Please use integers only."
-            [[ $OUTPUT == "cli" ]] \
-                && dialog --title "$TITLE" --msgbox "$TEXT" 0 0 \
-                    || zenity --error --title "$TITLE" --text "$TEXT"
+            promptMessage "$TITLE" "$TEXT"
 			else
 				[ $DEBUG -eq 1 ] && echo "DEBUG: PCAP size set to $PCAP_SIZE."
 				PCAP_SIZE_CONFIRMED="yes"
@@ -1126,18 +1001,12 @@ Would you like to enable mmap I/O?"
 		PCAP_RING_SIZE_CONFIRMED="no"
 		while  [ $PCAP_RING_SIZE_CONFIRMED = "no" ]; do
           TEXT="How large do you want your PCAP ring buffer?\n\nEach monitoring interface will have the specified amount allocated from RAM\nso be sure your system has enough memory. In the case of 4 sensor interfaces\nand a specified ring buffer of 1GB, 4GB of total RAM will be allocated for packet\nbuffering. For busy networks a ring buffer of at least 256MB is recommended.\n\nPlease enter an integer in Megabytes (MB). The default is 64 MB."
-          if [ $OUTPUT == "cli" ] ; then
-              PCAP_RING_SIZE=$(dialog --title "$TITLE" --inputbox "$TEXT" 0 0 "64" 3>&1 1>&2 2>&3)
-          else
-			     PCAP_RING_SIZE=$(zenity --title="$TITLE" --text="$TEXT" --entry --entry-text="64")
-          fi
+          promptInput "$TITLE" "$TEXT" "64" "PCAP_RING_SIZE"
 			[ $? = 1 ] && exit
 			COMPRESSED="$(echo $PCAP_RING_SIZE | sed -e 's/[^[:digit:]]//g')"
 			if [ "$COMPRESSED" != "$PCAP_RING_SIZE" ] || [ x$PCAP_RING_SIZE = "x" ]; then
             TEXT="Invalid MB value! Please use integers only."
-            [[ $OUTPUT == "cli" ]] \
-                && dialog --title "$TITLE" --msgbox "$TEXT" 0 0 \
-                    || zenity --error --title "$TITLE" --text "$TEXT"
+            promptMessage "$TITLE" "$TEXT"
 			else
 				[ $DEBUG -eq 1 ] && echo "DEBUG: PCAP ring size set to $PCAP_RING_SIZE."
 				PCAP_RING_SIZE_CONFIRMED="yes"
@@ -1148,30 +1017,13 @@ Would you like to enable mmap I/O?"
 	YES="Yes, Continue."
 	NO="No, Quit."
 	TEXT="Please note, if you choose not to enable full packet capture, you will not\nbe able to pivot from Sguil to PCAP, or to CapME to retrieve PCAP data.\n\nClick 'Yes' to continue without enabling full packet capture.\n\nOtherwise, click 'No' to exit setup and re-run it to enable the capture of this valuable data."
-   if [ $OUTPUT == "cli" ] ; then
-       dialog --title "$TITLE" --yes-label "$YES" --no-label "$NO" --yesno "$TEXT" 0 0
-   else
-       zenity --question --title="$TITLE" --text="$TEXT" --ok-label="$YES" --cancel-label="$NO" --no-wrap
-   fi
-		if [ $? = 1 ]; then
-			if [ $DEBUG -eq 1 ]; then
-				echo "DEBUG: Clicked No.  Exiting." && exit 1
-			else
-				exit 1
-			fi
-		fi
-        [ $DEBUG -eq 1 ] && echo "DEBUG: Clicked Yes.  Continuing without enabling full packet capture."
-	fi
+   promptOKCancel "$TITLE" "$TEXT" "$YES" "$NO"
 
 	# Ask for CRIT_DISK_USAGE
 	CRIT_DISK_USAGE_CONFIRMED="no"
 	while [ $CRIT_DISK_USAGE_CONFIRMED = "no" ]; do
        TEXT="At what percent of disk usage would you like to begin purging old logs?\n\nPlease enter an integer between 10 and 100.  The default is 90."
-       if [ $OUTPUT == "cli" ] ; then
-           CRIT_DISK_USAGE=$(dialog --title "$TITLE" --inputbox "$TEXT" 0 0 "90" 3>&1 1>&2 2>&3)
-       else
-           CRIT_DISK_USAGE=$(zenity --title="$TITLE" --text="$TEXT" --entry --entry-text="90")
-       fi
+       promptInput "$TITLE" "$TEXT" "90" "CRIT_DISK_USAGE"
 		[ $? = 1 ] && exit
 		COMPRESSED="$(echo $CRIT_DISK_USAGE | sed -e 's/[^[:digit:]]//g')"
 		[ "$COMPRESSED" == "$CRIT_DISK_USAGE" ] && 
@@ -1180,9 +1032,7 @@ Would you like to enable mmap I/O?"
 		CRIT_DISK_USAGE_CONFIRMED="yes" || 
           (
               TEXT="Invalid percentage! Please use integers between 0 and 100."
-              [[ $OUTPUT == "cli" ]] \
-                  && dialog --title "$TITLE" --msgbox "$TEXT" 0 0 \
-                      || zenity --error --title "$TITLE" --text "$TEXT"
+              promptMessage "$TITLE" "$TEXT"
           )
 	done
 	let WARN_DISK_USAGE=${CRIT_DISK_USAGE}-10
@@ -1196,9 +1046,9 @@ fi # End of ADVANCED SETUP - SENSOR
 #########################################
 # Check to see if the securityonion-onionsalt package is installed
 if [ $ADVANCED_SETUP -eq 1 ] && dpkg -l |grep "securityonion-onionsalt" |grep "ii" >/dev/null; then
-	SALT="yes"
-	if [ $CUSTOM -eq 1 ]; then
-TEXT="Salt can be enabled to help manage your entire sensor deployment.\n\
+	 SALT="yes"
+	 if [ $CUSTOM -eq 1 ]; then
+        TEXT="Salt can be enabled to help manage your entire sensor deployment.\n\
 \n\
 By default, Salt will automatically keep the following updated:\n\
 * OS user accounts\n\
@@ -1209,22 +1059,10 @@ Salt can also be used for remote execution, so you can run a command\n\
 and have it execute on all sensors across your deployment.\n\
 \n\
 Would you like to enable Salt?"
-		YES="Yes, enable Salt!"
-		NO="No, disable Salt"
-		if [ $OUTPUT == "cli" ] ; then
-          dialog --title "$TITLE" --yes-label "$YES" --no-label "$NO" --yesno "$TEXT" 0 0
-      else
-          zenity --question --title="$TITLE" --text="$TEXT" --ok-label="$YES" --cancel-label="$NO" --no-wrap
-      fi
-		ANSWER="$?"
-		if [ $ANSWER -eq 0 ]; then
-	        	[ $DEBUG -eq 1 ] && echo "DEBUG: Enable Salt."
-        		SALT="yes"
-		else
-        		[ $DEBUG -eq 1 ] && echo "DEBUG: Disable Salt."
-        		SALT="no"
-		fi
-	fi
+		  YES="Yes, enable Salt!"
+		  NO="No, disable Salt"
+        promptYesNoVar "$TITLE" "$TEXT" "$YES" "$NO" "SALT"
+	 fi
 fi
 
 # End of ADVANCED SETUP
@@ -1250,20 +1088,7 @@ to use ELSA, you should enable it on the master server and all sensors.\n\
 Would you like to enable ELSA?"
 	YES="Yes, enable ELSA!"
 	NO="No, disable ELSA."
-	if [ $OUTPUT == "cli" ] ; then
-       dialog --title "$TITLE" --yes-label "$YES" --no-label "$NO" --yesno "$TEXT" 0 0
-   else
-       zenity --question --title="$TITLE" --text="$TEXT" --ok-label="$YES" --cancel-label="$NO" --no-wrap
-   fi
-
-	ANSWER="$?"
-	if [ $ANSWER -eq 0 ]; then
-		[ $DEBUG -eq 1 ] && echo "DEBUG: Enable ELSA."
-		ELSA="YES"
-	else
-		[ $DEBUG -eq 1 ] && echo "DEBUG: Disable ELSA."
-		ELSA="NO"
-	fi
+   promptYesNoVar "$TITLE" "$TEXT" "$YES" "$NO" "SALT"
 
 	# If user chose to enable ELSA, ask about log_size_limit
 	if [ "$ELSA" = "YES" ]; then
@@ -1272,17 +1097,10 @@ Would you like to enable ELSA?"
 			LOG_SIZE_LIMIT_CONFIRMED="no"
 			while [ $LOG_SIZE_LIMIT_CONFIRMED = "no" ]; do
              TEXT="How much disk space (in GigaBytes) should be allocated for ELSA to store logs?\n\nPlease enter an integer greater than 0.  The default is half your disk size.\n\nPlease make sure that the value you set here is less than the size of your disk!\n\nIf you need to adjust this later, you can modify log__size__limit in the /etc/elsa__node.conf file."
-             if [ $OUTPUT == "cli" ] ; then
-                 LOG_SIZE_LIMIT_GB=$(dialog --title "$TITLE" --inputbox "$TEXT" 0 0 "$LOG_SIZE_LIMIT_GB" 3>&1 1>&2 2>&3)
-             else
-                 LOG_SIZE_LIMIT_GB=$(zenity --title="$TITLE" --text="$TEXT" --entry --entry-text="$LOG_SIZE_LIMIT_GB")
-             fi
+             promptInput "$TITLE" "$TEXT" "" "LOG_SIZE_LIMIT_GB"
 				[ $? = 1 ] && exit
 				if [ x$LOG_SIZE_LIMIT_GB = "x" ]; then
-                TEXT="Invalid log size limit! Please use integers greater than 0 and less than your disk size."
-                [[ $OUTPUT == "cli" ]] \
-                    && dialog --title "$TITLE" --msgbox "$TEXT" 0 0 \
-                        || zenity --error --title "$TITLE" --text "$TEXT"
+                promptMessage "$TITLE" "Invalid log size limit! Please use integers greater than 0 and less than your disk size."
 				else
 				COMPRESSED="$(echo $LOG_SIZE_LIMIT_GB | sed -e 's/[^[:digit:]]//g')"
 				[ "$COMPRESSED" == "$LOG_SIZE_LIMIT_GB" ] && 
@@ -1290,10 +1108,7 @@ Would you like to enable ELSA?"
 				[ $LOG_SIZE_LIMIT_GB -lt $DISK_SIZE_GB ] && 
 				LOG_SIZE_LIMIT_CONFIRMED="yes" ||
                 (
-                    TEXT="Invalid log size limit! Please use integers greater than 0 and less than your disk size."
-                    [[ $OUTPUT == "cli" ]] \
-                        && dialog --title "$TITLE" --msgbox "$TEXT" 0 0 \
-                            || zenity --error --title "$TITLE" --text "$TEXT"
+                    promptMessage "$TITLE" "Invalid log size limit! Please use integers greater than 0 and less than your disk size."
                 )
 				fi
 			done
@@ -1308,9 +1123,9 @@ if [ "$ELSA" = "NO" ]; then
 	ELSA_ACTION_CONFIRM="- Disable ELSA."
 else
 	if [ $SERVER -eq 1 ]; then
-	    	ELSA_ACTION_CONFIRM="- Configure ELSA as a Log Node and enable web interface.\n"
+	    ELSA_ACTION_CONFIRM="- Configure ELSA as a Log Node and enable web interface.\n"
 	else
-    		ELSA_ACTION_CONFIRM="- Configure ELSA as a Log Node.\n"
+    	 ELSA_ACTION_CONFIRM="- Configure ELSA as a Log Node.\n"
 
 		# Ask if they want to update the SERVER and restart Apache
 		TEXT="Would you like to automatically update the ELSA server?\n\
@@ -1319,19 +1134,7 @@ This will restart Apache on the ELSA server which will disrupt\n\
 any ELSA queries running at the time."
 		YES="Yes, update ELSA server!"
 		NO="No, do not update ELSA server."
-      if [ $OUTPUT == "cli" ] ; then
-          dialog --title "$TITLE" --yes-label "$YES" --no-label "$NO" --yesno "$TEXT" 0 0
-      else
-          zenity --question --title="$TITLE" --text="$TEXT" --ok-label="$YES" --cancel-label="$NO" --no-wrap
-      fi
-		ANSWER="$?"
-		if [ $ANSWER -eq 0 ]; then
-		    	[ $DEBUG -eq 1 ] && echo "DEBUG: Update ELSA Server."
-    			UPDATE_ELSA_SERVER="YES"
-		else
-			[ $DEBUG -eq 1 ] && echo "DEBUG: Do not update ELSA server."
-    			UPDATE_ELSA_SERVER="NO"
-		fi
+      promptYesNoVar "$TITLE" "$TEXT" "$YES" "$NO" "UPDATE_ELSA_SERVER"
   	fi
 fi
 
@@ -1343,9 +1146,7 @@ TEXT="$WRITEANSWERFILE has been saved."
 if [ "$WRITEANSWERFILE" ]; then
 	# write all the answers out
 	 save
-    [[ $OUTPUT == "cli" ]] \
-        && dialog --title "$TITLE" --msgbox "$TEXT" 0 0 \
-            || zenity --info --title "$TITLE" --text "$TEXT"
+    promptMessage "$TITLE" "$TEXT"
 	exit 0
 fi
 
