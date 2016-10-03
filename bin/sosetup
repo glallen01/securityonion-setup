@@ -24,7 +24,7 @@
 #########################################
 # Variables
 #########################################
-DEBUG="1"
+DEBUG="0"
 # Window title
 HOSTNAME=`hostname`
 #IP=`ifconfig |grep "inet addr" | awk '{print $2}' |cut -d\: -f2 |grep -v "127.0.0.1" |head -1`
@@ -143,14 +143,11 @@ For best performance, please ensure the machine is allocated at least 3GB of RAM
 https://github.com/Security-Onion-Solutions/security-onion/wiki/Hardware\n\n\
 Click 'No' to stop setup and adjust the amount of RAM allocated to this machine.\n\
 Otherwise, click 'Yes' to continue."
-# promptMessage "$TITLE" "$TEXT"
 
 function promptYesNoVar () {
-    : <<-END
-	Usage:
-	promptYesNoVar "$TITLE" "$TEXT" "$YES" "$NO" "NAME_OF_VAR_TO_SET"
-	NAME_OF_VAR_TO_SET="yes" or "no"
-	END
+    # Usage:
+    # promptYesNoVar "$TITLE" "$TEXT" "$YES" "$NO" "NAME_OF_VAR_TO_SET"
+    # NAME_OF_VAR_TO_SET="yes" or "no"
     TITLE="$1"; shift
     TEXT="$1"; shift
     YES="$1"; shift
@@ -171,40 +168,31 @@ function promptYesNoVar () {
 }
 
 function promptInput () {
-    : <<-END
-	Usage:
-	promptInput "$TITLE" "$TEXT" "DEFAULT_VAL" "NAME_OF_VAR_TO_SET"
-   or
-	promptInput "$TITLE" "$TEXT" "" "NAME_OF_VAR_TO_SET"
-	END
+    # Usage:
+    # promptInput "$TITLE" "$TEXT" "DEFAULT_VAL" "NAME_OF_VAR_TO_SET"
+    # promptInput "$TITLE" "$TEXT" "" "NAME_OF_VAR_TO_SET"
     TITLE="$1"; shift
     TEXT="$1"; shift
     DEFAULT="$1"; shift
-
     if [ $OUTPUT == "cli" ] ; then
         eval "${1}=$(dialog --title "$TITLE" --inputbox "$TEXT" 0 0 "$DEFAULT" 3>&1 1>&2 2>&3)"
     else
         eval "${1}=$(zenity --title="$TITLE" --text="$TEXT" --entry --entry-text="$DEFAULT")"
     fi
-
-    : <<END
-# cancel doesn't work since dialog/zenity are wrapped in an eval :(
-# commenting this section out until better ideas develop
-	 if [ $? = 1 ]; then
-		  if [ $DEBUG -eq 1 ]; then
-				echo "DEBUG: Clicked Cancel.  Exiting."  && exit 1
-		  else
-				exit 1
-		  fi
-	 fi
-END
+## cancel doesn't work since dialog/zenity are wrapped in an eval :(
+## commenting this section out until better ideas develop
+#	 if [ $? = 1 ]; then
+#		  if [ $DEBUG -eq 1 ]; then
+#				echo "DEBUG: Clicked Cancel.  Exiting."  && exit 1
+#		  else
+#				exit 1
+#		  fi
+#	 fi
 }
 
 function promptMessage () {
-    : <<-END
-	Usage:
-	promptMessage "$TITLE" "$TEXT"
-	END
+    # Usage:
+    # promptMessage "$TITLE" "$TEXT"
     TITLE="$1"; shift
     TEXT="$1";
     [[ $OUTPUT == "cli" ]] \
@@ -213,10 +201,8 @@ function promptMessage () {
 }
 
 function promptOKCancel () {
-    : <<-END
-	Usage:
-	promptOKCancel "$TITLE" "$TEXT" "$YES" "$NO"
-	END
+    # Usage:
+    # promptOKCancel "$TITLE" "$TEXT" "$YES" "$NO"
     TITLE="$1"; shift
     TEXT="$1"; shift
     YES="$1"; shift
@@ -241,16 +227,16 @@ function ask() {
 #########################################
 # Welcome screen
 #########################################
-    export TEXT=$(cat <<EOF
+    export TEXT=$(cat <<END
 Welcome to Security Onion Setup!
 
 This program will allow you to configure Security Onion on $HOSTNAME.
 
 Would you like to continue?
-EOF
+END
 )
     if [ "$WRITEANSWERFILE" ]; then
-        export TEXT=$(cat <<EOF
+        export TEXT=$(cat <<END
 Welcome to Security Onion Setup!
 
 Writing an answer file is still experimental, and does not
@@ -259,7 +245,7 @@ your /etc/network/interfaces file is already configured and
 has at least one interface configured for monitoring.
 
 Would you like to continue?
-EOF
+END
 )
     fi
     YES="Yes, Continue!"
@@ -673,382 +659,382 @@ fi
 # ADVANCED SETUP - SENSOR
 #########################################
 if [ $ADVANCED_SETUP -eq 1 ] && [ $SENSOR -eq 1 ]; then
-	
-	# Remove "-c" from PCAP_OPTIONS for better performance on production networks
-	PCAP_OPTIONS=""
 
-	# Ask for PF_RING_SLOTS        
-	PF_RING_SLOTS_CONFIRMED="no"
-	while [ $PF_RING_SLOTS_CONFIRMED = "no" ]; do
-       TEXT="What would you like to set PF__RING min__num__slots to?\n\nThe default is 4096.  For busy networks, you may want to increase this to a higher number like 65534.\n\nIf you need to change this later, you can modify /etc/modprobe.d/pf__ring.conf and reload the pf_ring module."
-       promptInput "$TITLE" "$TEXT" "4096" "PF_RING_SLOTS"
-		COMPRESSED="$(echo $PF_RING_SLOTS | sed -e 's/[^[:digit:]]//g')"
-		if [ "$COMPRESSED" != "$PF_RING_SLOTS" ] || [ x$PF_RING_SLOTS = "x" ]; then
-          TEXT="Invalid value! Please use integers only."
-          promptMessage "$TITLE" "$TEXT"
-		else
-			[ $DEBUG -eq 1 ] && echo "DEBUG: PF_RING min_num_slots set to $PF_RING_SLOTS."
-			PF_RING_SLOTS_CONFIRMED="yes"
-		fi
-	done
+	 # Remove "-c" from PCAP_OPTIONS for better performance on production networks
+	 PCAP_OPTIONS=""
 
-	# Ask which interface(s) to listen on
-	if [ $NUM_INTERFACES -gt 1 ]; then
-	TEXT="Which network interface(s) should be monitored?\n\nIf you allowed Setup to configure /etc/network/interfaces, your monitor interfaces are already selected."
-		INTERFACES=`awk '/:/ {print $1}' /proc/net/dev | tr -d ':' |grep -v "^lo$" | sort`
-		if grep "Security Onion" /etc/network/interfaces >/dev/null 2>&1 && grep manual /etc/network/interfaces >/dev/null 2>&1; then
-		[ $? = 1 ] && exit 1
-			CONFIGURED_INTERFACES=`awk '/manual/ {print $2}' /etc/network/interfaces`
-			INPUT=`for i in $INTERFACES; do 
-					if echo $CONFIGURED_INTERFACES |grep $i >/dev/null 2>&1; then
-						echo -n "TRUE $i "
-					else
-						echo -n "FALSE $i "
-					fi
-				done`
-		else
-			INPUT=`for i in $INTERFACES; do echo -n "FALSE $i "; done`
-		fi
-      if [ $OUTPUT == "cli" ] ; then
-          # need to reverse $INPUT above by pairs: "FALSE eth0 TRUE eth1" => "eth0 off eth1 on"
-          INPUT=$(while read -ra ARR
-                  do
-                      LEN=${#ARR[@]}
-                      for (( I=0 ; I<$LEN ; I+=2)); do
-                          echo -n "${ARR[I+1]} "
-                          if [[ "${ARR[I]}" == "TRUE" ]] ; then echo -n "on " ; else echo -n "off "; fi
-                      done
-                  done <<< "$INPUT")
-          INTERFACES=$(dialog --no-items --title "$TITLE" --radiolist "$TEXT" 0 0 0 $INPUT 3>&1 1>&2 2>&3 |sed 's/|/ /g')
-      else
-          INTERFACES=$(zenity --list --radiolist --column "Enabled" --column "Interface" --hide-header --title="$TITLE" --text="$TEXT" $INPUT |sed 's/|/ /g')
-      fi
-		if [ "$INTERFACES" = "" ]; then
-			[ $DEBUG -eq 1 ] && echo "DEBUG: Clicked Cancel.  Exiting."
-		        exit
-		fi
-		[ $DEBUG -eq 1 ] &&  echo "DEBUG: Selected interfaces $INTERFACES."
-	fi
-	SENSOR_CONFIRM_1="- Monitor each of the following interfaces:\n"
-	SENSOR_CONFIRM_2="$INTERFACES\n"
-	
-	# Determine number of cores and use that as a maximum value for IDS/Bro processes to run
-	LIST=`seq 1 $CALCD_CORES`; SELECTIONS=`for i in $LIST; do echo "FALSE $i"; done`
+	 # Ask for PF_RING_SLOTS
+	 PF_RING_SLOTS_CONFIRMED="no"
+	 while [ $PF_RING_SLOTS_CONFIRMED = "no" ]; do
+        TEXT="What would you like to set PF__RING min__num__slots to?\n\nThe default is 4096.  For busy networks, you may want to increase this to a higher number like 65534.\n\nIf you need to change this later, you can modify /etc/modprobe.d/pf__ring.conf and reload the pf_ring module."
+        promptInput "$TITLE" "$TEXT" "4096" "PF_RING_SLOTS"
+		  COMPRESSED="$(echo $PF_RING_SLOTS | sed -e 's/[^[:digit:]]//g')"
+		  if [ "$COMPRESSED" != "$PF_RING_SLOTS" ] || [ x$PF_RING_SLOTS = "x" ]; then
+            TEXT="Invalid value! Please use integers only."
+            promptMessage "$TITLE" "$TEXT"
+		  else
+			   [ $DEBUG -eq 1 ] && echo "DEBUG: PF_RING min_num_slots set to $PF_RING_SLOTS."
+			   PF_RING_SLOTS_CONFIRMED="yes"
+		  fi
+	 done
 
-	if [ $CUSTOM -eq 1 ]; then
-	# IDS Engine
-	TEXT="The IDS Engine (Snort/Suricata) listens on the interfaces\n\
+	 # Ask which interface(s) to listen on
+	 if [ $NUM_INTERFACES -gt 1 ]; then
+	     TEXT="Which network interface(s) should be monitored?\n\nIf you allowed Setup to configure /etc/network/interfaces, your monitor interfaces are already selected."
+		  INTERFACES=`awk '/:/ {print $1}' /proc/net/dev | tr -d ':' |grep -v "^lo$" | sort`
+		  if grep "Security Onion" /etc/network/interfaces >/dev/null 2>&1 && grep manual /etc/network/interfaces >/dev/null 2>&1; then
+		      [ $? = 1 ] && exit 1
+			   CONFIGURED_INTERFACES=`awk '/manual/ {print $2}' /etc/network/interfaces`
+			   INPUT=$(for i in $INTERFACES; do
+					         if echo $CONFIGURED_INTERFACES |grep $i >/dev/null 2>&1; then
+						          echo -n "TRUE $i "
+					         else
+						          echo -n "FALSE $i "
+					         fi
+				        done)
+		  else
+			   INPUT=`for i in $INTERFACES; do echo -n "FALSE $i "; done`
+		  fi
+        if [ $OUTPUT == "cli" ] ; then
+            # need to reverse $INPUT above by pairs: "FALSE eth0 TRUE eth1" => "eth0 off eth1 on"
+            INPUT=$(while read -ra ARR
+                    do
+                        LEN=${#ARR[@]}
+                        for (( I=0 ; I<$LEN ; I+=2)); do
+                            echo -n "${ARR[I+1]} "
+                            if [[ "${ARR[I]}" == "TRUE" ]] ; then echo -n "on " ; else echo -n "off "; fi
+                        done
+                    done <<< "$INPUT")
+            INTERFACES=$(dialog --no-items --title "$TITLE" --radiolist "$TEXT" 0 0 0 $INPUT 3>&1 1>&2 2>&3 |sed 's/|/ /g')
+        else
+            INTERFACES=$(zenity --list --radiolist --column "Enabled" --column "Interface" --hide-header --title="$TITLE" --text="$TEXT" $INPUT |sed 's/|/ /g')
+        fi
+        if [ "$INTERFACES" = "" ]; then
+			   [ $DEBUG -eq 1 ] && echo "DEBUG: Clicked Cancel.  Exiting."
+		      exit
+		  fi
+		  [ $DEBUG -eq 1 ] &&  echo "DEBUG: Selected interfaces $INTERFACES."
+	 fi
+	 SENSOR_CONFIRM_1="- Monitor each of the following interfaces:\n"
+	 SENSOR_CONFIRM_2="$INTERFACES\n"
+
+	 # Determine number of cores and use that as a maximum value for IDS/Bro processes to run
+	 LIST=`seq 1 $CALCD_CORES`; SELECTIONS=`for i in $LIST; do echo "FALSE $i"; done`
+
+	 if [ $CUSTOM -eq 1 ]; then
+	     # IDS Engine
+	     TEXT="The IDS Engine (Snort/Suricata) listens on the interfaces\n\
 specified on the previous screen and logs IDS alerts.\n\
 \n\
 Would you like to enable the IDS Engine?"
-	YES="Yes, enable the IDS Engine!"
-	NO="No, disable the IDS Engine."
-   if [ $OUTPUT == "cli" ] ; then
-       dialog --title "$TITLE" --yes-label "$YES" --no-label "$NO" --yesno "$TEXT" 0 0
-   else
-       zenity --question --title="$TITLE" --text="$TEXT" --ok-label="$YES" --cancel-label="$NO" --no-wrap
-   fi
-	ANSWER="$?"
-		if [ $ANSWER -eq 1 ]; then
-			[ $DEBUG -eq 1 ] && echo "DEBUG: Clicked No.  Disabling IDS Engine."
-			IDS_ENGINE_ENABLED="no"
-			BARNYARD2_ENABLED="no"
-			SNORT_AGENT_ENABLED="no"
-		else
-			[ $DEBUG -eq 1 ] && echo "DEBUG: Clicked Yes.  Enabling IDS Engine."
-		fi
-	fi
+	     YES="Yes, enable the IDS Engine!"
+	     NO="No, disable the IDS Engine."
+        if [ $OUTPUT == "cli" ] ; then
+            dialog --title "$TITLE" --yes-label "$YES" --no-label "$NO" --yesno "$TEXT" 0 0
+        else
+            zenity --question --title="$TITLE" --text="$TEXT" --ok-label="$YES" --cancel-label="$NO" --no-wrap
+        fi
+	     ANSWER="$?"
+		  if [ $ANSWER -eq 1 ]; then
+			   [ $DEBUG -eq 1 ] && echo "DEBUG: Clicked No.  Disabling IDS Engine."
+			   IDS_ENGINE_ENABLED="no"
+			   BARNYARD2_ENABLED="no"
+			   SNORT_AGENT_ENABLED="no"
+		  else
+			   [ $DEBUG -eq 1 ] && echo "DEBUG: Clicked Yes.  Enabling IDS Engine."
+		  fi
+	 fi
 
-	# IDS Engine Procs
-   if [ "$IDS_ENGINE_ENABLED" == "yes" ] && [ "$CALCD_CORES" -gt 1 ] && [ "$CUSTOM" -eq 1 ]; then
-       TEXT="How many IDS engine processes would you like to run?\n\
+	 # IDS Engine Procs
+    if [ "$IDS_ENGINE_ENABLED" == "yes" ] && [ "$CALCD_CORES" -gt 1 ] && [ "$CUSTOM" -eq 1 ]; then
+        TEXT="How many IDS engine processes would you like to run?\n\
 \n\
 Based on your system's number of CPU cores, it is recommended that you run $CALCD_CORES IDS engine processes per interface.\n\
 \n\
 If you need to change this setting later, change IDS_LB_PROCS in /etc/nsm/HOSTNAME-INTERFACE/sensor.conf"
-       if [ $OUTPUT == "cli" ] ; then
-           # need to reverse $SELECTIONS above by pairs: "FALSE eth0 TRUE eth1" => "eth0 off eth1 on"
-           SELECTIONS=$(while read -ra ARR
-                        do
-                            LEN=${#ARR[@]}
-                            for (( I=0 ; I<$LEN ; I+=2)); do
-                                echo -n "${ARR[I+1]} "
-                                if [[ "${ARR[I]}" == "TRUE" ]] ; then echo -n "on " ; else echo -n "off "; fi
-                            done
-                        done <<< "$INPUT")
-           IDS_LB_PROCS=$(dialog --no-items --title "$TITLE" --radiolist "$TEXT" 0 0 0 $SELECTIONS 3>&1 1>&2 2>&3 |sed 's/|/ /g')
-       else
-           IDS_LB_PROCS=$(zenity --list --radiolist --column "" --column "" $SELECTIONS --hide-header --title="$TITLE" --text="$TEXT" )
-       fi
+        if [ $OUTPUT == "cli" ] ; then
+            # need to reverse $SELECTIONS above by pairs: "FALSE eth0 TRUE eth1" => "eth0 off eth1 on"
+            SELECTIONS=$(while read -ra ARR
+                         do
+                             LEN=${#ARR[@]}
+                             for (( I=0 ; I<$LEN ; I+=2)); do
+                                 echo -n "${ARR[I+1]} "
+                                 if [[ "${ARR[I]}" == "TRUE" ]] ; then echo -n "on " ; else echo -n "off "; fi
+                             done
+                         done <<< "$INPUT")
+            IDS_LB_PROCS=$(dialog --no-items --title "$TITLE" --radiolist "$TEXT" 0 0 0 $SELECTIONS 3>&1 1>&2 2>&3 |sed 's/|/ /g')
+        else
+            IDS_LB_PROCS=$(zenity --list --radiolist --column "" --column "" $SELECTIONS --hide-header --title="$TITLE" --text="$TEXT" )
+        fi
 
-       if [ "$IDS_LB_PROCS" = "" ]; then
-           [ $DEBUG -eq 1 ] && echo "DEBUG: Clicked Cancel.  Exiting."
-           exit
-       fi
-		 if [ "$CALCD_CORES" -gt 1 ]; then
-			  IDS_LB_PROCS_CONFIRM="- Run $IDS_LB_PROCS load-balanced IDS engine processes per interface.\n"
-       else
-			  IDS_LB_PROCS=1
-			  IDS_LB_PROCS_CONFIRM="- Run a a single IDS engine process per interface.\n"
-       fi
-   else
-		 IDS_LB_PROCS=$CALCD_CORES
-       if [ "$CALCD_CORES" -gt 1 ]; then
-			  IDS_LB_PROCS_CONFIRM="- Run $CALCD_CORES load-balanced IDS engine processes per interface.\n"
-       else
-			  IDS_LB_PROCS=1
-			  IDS_LB_PROCS_CONFIRM="- Run a single IDS engine process per interface.\n"
-       fi
-	fi
-	# Ask if user would like to configure a custom HOME_NET
-	if [ "$IDS_ENGINE_ENABLED" == "yes" ]; then
-		 HOME_NET_CONFIRMED="no"
-		 while [ "$HOME_NET_CONFIRMED" == "no" ];do
-			  TEXT="What would you like to configure HOME__NET as?\n\nAdd a comma (no space) after each address range.\n\nEx. 192.168.0.0/16,10.0.0.0/8,172.16.0.0/12"
-           promptInput "$TITLE" "$TEXT" "$HOME_NET" "HOME_NET"
-			  ANSWER="$?"
-			  if [ $ANSWER -eq 1 ]; then
+        if [ "$IDS_LB_PROCS" = "" ]; then
+            [ $DEBUG -eq 1 ] && echo "DEBUG: Clicked Cancel.  Exiting."
+            exit
+        fi
+		  if [ "$CALCD_CORES" -gt 1 ]; then
+			   IDS_LB_PROCS_CONFIRM="- Run $IDS_LB_PROCS load-balanced IDS engine processes per interface.\n"
+        else
+			   IDS_LB_PROCS=1
+			   IDS_LB_PROCS_CONFIRM="- Run a a single IDS engine process per interface.\n"
+        fi
+    else
+		  IDS_LB_PROCS=$CALCD_CORES
+        if [ "$CALCD_CORES" -gt 1 ]; then
+			   IDS_LB_PROCS_CONFIRM="- Run $CALCD_CORES load-balanced IDS engine processes per interface.\n"
+        else
+			   IDS_LB_PROCS=1
+			   IDS_LB_PROCS_CONFIRM="- Run a single IDS engine process per interface.\n"
+        fi
+	 fi
+	 # Ask if user would like to configure a custom HOME_NET
+	 if [ "$IDS_ENGINE_ENABLED" == "yes" ]; then
+		  HOME_NET_CONFIRMED="no"
+		  while [ "$HOME_NET_CONFIRMED" == "no" ];do
+			   TEXT="What would you like to configure HOME__NET as?\n\nAdd a comma (no space) after each address range.\n\nEx. 192.168.0.0/16,10.0.0.0/8,172.16.0.0/12"
+            promptInput "$TITLE" "$TEXT" "$HOME_NET" "HOME_NET"
+			   ANSWER="$?"
+			   if [ $ANSWER -eq 1 ]; then
 				   [ $DEBUG -eq 1 ] && echo "DEBUG: Clicked Cancel.  Exiting Setup."
 				   exit 1
-			  else
-				   if [ "$HOME_NET" == "" ]; then
-                   TEXT="Please provide a value for HOME_NET!"
-                   promptMessage "$TITLE" "$TEXT"
-				   else
-					    HOME_NET_CONFIRMED="yes"
-					    [ $DEBUG -eq 1 ] && echo "DEBUG: Clicked OK.  Configuring HOME_NET as $HOME_NET."
-				   fi
-			  fi
-		 done
-	fi
-	IDS_HOME_NET_CONFIRM="- Configure IDS HOME_NET as: $HOME_NET.\n"
-	if [ $CUSTOM -eq 1 ]; then
-	    # Bro
-	    TEXT="Bro listens on the chosen interfaces and writes protocol logs.\n\
+			   else
+				    if [ "$HOME_NET" == "" ]; then
+                    TEXT="Please provide a value for HOME_NET!"
+                    promptMessage "$TITLE" "$TEXT"
+				    else
+					     HOME_NET_CONFIRMED="yes"
+					     [ $DEBUG -eq 1 ] && echo "DEBUG: Clicked OK.  Configuring HOME_NET as $HOME_NET."
+				    fi
+			   fi
+		  done
+	 fi
+	 IDS_HOME_NET_CONFIRM="- Configure IDS HOME_NET as: $HOME_NET.\n"
+	 if [ $CUSTOM -eq 1 ]; then
+	     # Bro
+	     TEXT="Bro listens on the chosen interfaces and writes protocol logs.\n\
 \n\
 Would you like to enable Bro?"
-	    YES="Yes, enable Bro!"
-	    NO="No, disable Bro."
-       if [ $OUTPUT == "cli" ] ; then
-           dialog --title "$TITLE" --yes-label "$YES" --no-label "$NO" --yesno "$TEXT" 0 0
-       else
-           zenity --question --title="$TITLE" --text="$TEXT" --ok-label="$YES" --cancel-label="$NO" --no-wrap
-       fi
-	ANSWER="$?"
-	if [ $ANSWER -eq 1 ]; then
-		[ $DEBUG -eq 1 ] && echo "DEBUG: Clicked No.  Disabling Bro."
-		BRO_ENABLED="no"
-		HTTP_AGENT_ENABLED="no"
-	else
-		[ $DEBUG -eq 1 ] && echo "DEBUG: Clicked Yes.  Enabling Bro."
-	fi
+	     YES="Yes, enable Bro!"
+	     NO="No, disable Bro."
+        if [ $OUTPUT == "cli" ] ; then
+            dialog --title "$TITLE" --yes-label "$YES" --no-label "$NO" --yesno "$TEXT" 0 0
+        else
+            zenity --question --title="$TITLE" --text="$TEXT" --ok-label="$YES" --cancel-label="$NO" --no-wrap
+        fi
+	     ANSWER="$?"
+	     if [ $ANSWER -eq 1 ]; then
+		      [ $DEBUG -eq 1 ] && echo "DEBUG: Clicked No.  Disabling Bro."
+		      BRO_ENABLED="no"
+		      HTTP_AGENT_ENABLED="no"
+	     else
+		      [ $DEBUG -eq 1 ] && echo "DEBUG: Clicked Yes.  Enabling Bro."
+	     fi
 
-	# Bro file extraction
-	if [ "$BRO_ENABLED" == "yes" ]; then
-		TEXT="Bro can extract files (EXEs by default) from your network traffic.\n\nIf enabled, EXEs will be stored in /nsm/bro/extracted/.\n\nWould you like to enable file extraction?"
-		YES="Yes, enable file extraction!"
-		NO="No, disable file extraction."
-      promptYesNoVar "$TITLE" "$TEXT" "$YES" "$NO" "EXTRACT_FILES"
-	fi
-	fi
+	     # Bro file extraction
+	     if [ "$BRO_ENABLED" == "yes" ]; then
+		      TEXT="Bro can extract files (EXEs by default) from your network traffic.\n\nIf enabled, EXEs will be stored in /nsm/bro/extracted/.\n\nWould you like to enable file extraction?"
+		      YES="Yes, enable file extraction!"
+		      NO="No, disable file extraction."
+            promptYesNoVar "$TITLE" "$TEXT" "$YES" "$NO" "EXTRACT_FILES"
+	     fi
+	 fi
 
-	# BRO_LB_PROCS
-	if [ "$BRO_ENABLED" == "yes" ] && [ "$CALCD_CORES" -gt 1 ] && [ "$CUSTOM" -eq 1 ]; then
-		TEXT="How many Bro processes would you like to run?\n\
+	 # BRO_LB_PROCS
+	 if [ "$BRO_ENABLED" == "yes" ] && [ "$CALCD_CORES" -gt 1 ] && [ "$CUSTOM" -eq 1 ]; then
+		  TEXT="How many Bro processes would you like to run?\n\
 \n\
 Based on your system's number of CPU cores, it is recommended that you run $CALCD_CORES Bro processes per interface.
 \n\
 If you need to change this setting later, you can change the lb_procs variable in /opt/bro/etc/node.cfg."
-		BRO_LB_PROCS=`zenity --list --radiolist --column "" --column "" $SELECTIONS --hide-header --text="$TEXT" --title="$TITLE"`
-		if [ "$BRO_LB_PROCS" = "" ]; then
-			[ $DEBUG -eq 1 ] && echo "DEBUG: Clicked Cancel.  Exiting."
-			exit
-		fi
-		if [ "$CALCD_CORES" -gt 1 ]; then
-			BRO_LB_PROCS_CONFIRM="- Run $BRO_LB_PROCS load-balanced Bro processes per interface.\n"
-		else
-			BRO_LB_PROCS=1
-			BRO_LB_PROCS_CONFIRM="- Run a a single Bro process per interface.\n"
-		fi
-	else
-		BRO_LB_PROCS=$CALCD_CORES
-		if [ "$CALCD_CORES" -gt 1 ]; then
-			BRO_LB_PROCS_CONFIRM="- Run $CALCD_CORES load-balanced Bro processes per interface.\n"
-		else
-			BRO_LB_PROCS=1
-			BRO_LB_PROCS_CONFIRM="- Run a single Bro process per interface.\n"
-		fi
-	fi
+		  BRO_LB_PROCS=`zenity --list --radiolist --column "" --column "" $SELECTIONS --hide-header --text="$TEXT" --title="$TITLE"`
+		  if [ "$BRO_LB_PROCS" = "" ]; then
+			   [ $DEBUG -eq 1 ] && echo "DEBUG: Clicked Cancel.  Exiting."
+			   exit
+		  fi
+		  if [ "$CALCD_CORES" -gt 1 ]; then
+			   BRO_LB_PROCS_CONFIRM="- Run $BRO_LB_PROCS load-balanced Bro processes per interface.\n"
+		  else
+			   BRO_LB_PROCS=1
+			   BRO_LB_PROCS_CONFIRM="- Run a a single Bro process per interface.\n"
+		  fi
+	 else
+		  BRO_LB_PROCS=$CALCD_CORES
+		  if [ "$CALCD_CORES" -gt 1 ]; then
+			   BRO_LB_PROCS_CONFIRM="- Run $CALCD_CORES load-balanced Bro processes per interface.\n"
+		  else
+			   BRO_LB_PROCS=1
+			   BRO_LB_PROCS_CONFIRM="- Run a single Bro process per interface.\n"
+		  fi
+	 fi
 
-	if [ $CUSTOM -eq 1 ]; then
-	# http_agent
-	if [ "$BRO_ENABLED" == "yes" ]; then
-		TEXT="http_agent sends Bro's http.log to the Sguil database.\n\
+	 if [ $CUSTOM -eq 1 ]; then
+	     # http_agent
+	     if [ "$BRO_ENABLED" == "yes" ]; then
+		      TEXT="http_agent sends Bro's http.log to the Sguil database.\n\
 \n\
 If you plan to access Bro's http.log via ELSA,\n\
 you may want to disable http_agent to avoid duplication of effort.\n\
 \n\
 Would you like to enable http_agent?"
-		YES="Yes, enable http__agent!"
-		NO="No, disable http__agent."
-      promptYesNoVar "$TITLE" "$TEXT" "$YES" "$NO" "HTTP_AGENT_ENABLED"
-	fi
+		      YES="Yes, enable http__agent!"
+		      NO="No, disable http__agent."
+            promptYesNoVar "$TITLE" "$TEXT" "$YES" "$NO" "HTTP_AGENT_ENABLED"
+	     fi
 
-	# Argus
-	TEXT="Argus listens on the chosen interfaces and logs session data to the filesystem.\n\
+	     # Argus
+	     TEXT="Argus listens on the chosen interfaces and logs session data to the filesystem.\n\
 \n\
 If you plan to use other forms of session data (like Bro's conn.log or Prads),\n\
 you may want to disable Argus to avoid duplication of effort.\n\
 \n\
 Would you like to enable Argus?"
-	YES="Yes, enable Argus!"
-	NO="No, disable Argus."
-   promptYesNoVar "$TITLE" "$TEXT" "$YES" "$NO" "ARGUS_ENABLED"
+	     YES="Yes, enable Argus!"
+	     NO="No, disable Argus."
+        promptYesNoVar "$TITLE" "$TEXT" "$YES" "$NO" "ARGUS_ENABLED"
 
-	# Prads
-	TEXT="Prads listens on the chosen interfaces and provides session and asset data for Sguil.\n\
+	     # Prads
+	     TEXT="Prads listens on the chosen interfaces and provides session and asset data for Sguil.\n\
 \n\
 If you plan to use other forms of session data (like Bro's conn.log or Argus)\n\
 and/or you plan to use other forms of asset data (like Bro's software.log),\n\
 you may want to disable Prads to avoid duplication of effort.\n\
 \n\
 Would you like to enable Prads?"
-	YES="Yes, enable Prads!"
-	NO="No, disable Prads."
-	if [ $OUTPUT == "cli" ] ; then
-       dialog --title "$TITLE" --yes-label "$YES" --no-label "$NO" --yesno "$TEXT" 0 0
-   else
-       zenity --question --title="$TITLE" --text="$TEXT" --ok-label="$YES" --cancel-label="$NO" --no-wrap
-   fi
-	ANSWER="$?"
-	if [ $ANSWER -eq 1 ]; then
-		[ $DEBUG -eq 1 ] && echo "DEBUG: Clicked No.  Disabling Prads."
-		PRADS_ENABLED="no"
-		PADS_AGENT_ENABLED="no"
-		SANCP_AGENT_ENABLED="no"
-	else
-		[ $DEBUG -eq 1 ] && echo "DEBUG: Clicked Yes.  Enabling Prads."
-		PRADS_ENABLED="yes"
-		PADS_AGENT_ENABLED="yes"
-		SANCP_AGENT_ENABLED="yes"
-	fi
+	     YES="Yes, enable Prads!"
+	     NO="No, disable Prads."
+	     if [ $OUTPUT == "cli" ] ; then
+            dialog --title "$TITLE" --yes-label "$YES" --no-label "$NO" --yesno "$TEXT" 0 0
+        else
+            zenity --question --title="$TITLE" --text="$TEXT" --ok-label="$YES" --cancel-label="$NO" --no-wrap
+        fi
+	     ANSWER="$?"
+	     if [ $ANSWER -eq 1 ]; then
+		      [ $DEBUG -eq 1 ] && echo "DEBUG: Clicked No.  Disabling Prads."
+		      PRADS_ENABLED="no"
+		      PADS_AGENT_ENABLED="no"
+		      SANCP_AGENT_ENABLED="no"
+	     else
+		      [ $DEBUG -eq 1 ] && echo "DEBUG: Clicked Yes.  Enabling Prads."
+		      PRADS_ENABLED="yes"
+		      PADS_AGENT_ENABLED="yes"
+		      SANCP_AGENT_ENABLED="yes"
+	     fi
 
-	# PCAP
-	TEXT="Full packet capture writes all monitored traffic to disk.\n\
+	     # PCAP
+	     TEXT="Full packet capture writes all monitored traffic to disk.\n\
 \n\
 Full packet capture requires lots of disk space,\n\
 but gives you lots of forensic capabilities\n\
 and is therefore highly recommended!\n\
 \n\
 Would you like to enable full packet capture?"
-	YES="Yes, enable full packet capture!"
-	NO="No, disable full packet capture."
-		if [ $OUTPUT == "cli" ] ; then
-          dialog --title "$TITLE" --yes-label "$YES" --no-label "$NO" --yesno "$TEXT" 0 0
-      else
-          zenity --question --title="$TITLE" --text="$TEXT" --ok-label="$YES" --cancel-label="$NO" --no-wrap
-      fi
-	ANSWER="$?"
-	if [ $ANSWER -eq 1 ]; then
-		[ $DEBUG -eq 1 ] && echo "DEBUG: Clicked No.  Disabling full packet capture."
-		PCAP_ENABLED="no"
-		PCAP_AGENT_ENABLED="no"
-	else
-		[ $DEBUG -eq 1 ] && echo "DEBUG: Clicked Yes.  Enabling full packet capture."
-	fi
+	     YES="Yes, enable full packet capture!"
+	     NO="No, disable full packet capture."
+		  if [ $OUTPUT == "cli" ] ; then
+            dialog --title "$TITLE" --yes-label "$YES" --no-label "$NO" --yesno "$TEXT" 0 0
+        else
+            zenity --question --title="$TITLE" --text="$TEXT" --ok-label="$YES" --cancel-label="$NO" --no-wrap
+        fi
+	     ANSWER="$?"
+	     if [ $ANSWER -eq 1 ]; then
+		      [ $DEBUG -eq 1 ] && echo "DEBUG: Clicked No.  Disabling full packet capture."
+		      PCAP_ENABLED="no"
+		      PCAP_AGENT_ENABLED="no"
+	     else
+		      [ $DEBUG -eq 1 ] && echo "DEBUG: Clicked Yes.  Enabling full packet capture."
+	     fi
 
-	# Ask for PCAP_SIZE
-	if [ "$PCAP_ENABLED" == "yes" ]; then
+	     # Ask for PCAP_SIZE
+	     if [ "$PCAP_ENABLED" == "yes" ]; then
 
-		# Ask for PCAP_SIZE        
-		PCAP_SIZE_CONFIRMED="no"
-		while [ $PCAP_SIZE_CONFIRMED = "no" ]; do
-          TEXT="How big do you want your pcap files to be?\n\nPlease enter an integer in Megabytes (MB).  The default is 150 MB."
-          promptInput "$TITLE" "$TEXT" "150" "PCAP_SIZE"
-			[ $? = 1 ] && exit
-			COMPRESSED="$(echo $PCAP_SIZE | sed -e 's/[^[:digit:]]//g')"
-			if [ "$COMPRESSED" != "$PCAP_SIZE" ] || [ x$PCAP_SIZE = "x" ]; then
-            TEXT="Invalid MB value! Please use integers only."
-            promptMessage "$TITLE" "$TEXT"
-			else
-				[ $DEBUG -eq 1 ] && echo "DEBUG: PCAP size set to $PCAP_SIZE."
-				PCAP_SIZE_CONFIRMED="yes"
-			fi
-		done
+		      # Ask for PCAP_SIZE        
+		      PCAP_SIZE_CONFIRMED="no"
+		      while [ $PCAP_SIZE_CONFIRMED = "no" ]; do
+                TEXT="How big do you want your pcap files to be?\n\nPlease enter an integer in Megabytes (MB).  The default is 150 MB."
+                promptInput "$TITLE" "$TEXT" "150" "PCAP_SIZE"
+			       [ $? = 1 ] && exit
+			       COMPRESSED="$(echo $PCAP_SIZE | sed -e 's/[^[:digit:]]//g')"
+			       if [ "$COMPRESSED" != "$PCAP_SIZE" ] || [ x$PCAP_SIZE = "x" ]; then
+                    TEXT="Invalid MB value! Please use integers only."
+                    promptMessage "$TITLE" "$TEXT"
+			       else
+				        [ $DEBUG -eq 1 ] && echo "DEBUG: PCAP size set to $PCAP_SIZE."
+				        PCAP_SIZE_CONFIRMED="yes"
+			       fi
+		      done
 
-		# Ask about MMAP
-		TEXT="netsniff-ng defaults to using scatter/gather pcap file I/O.\n\
+		      # Ask about MMAP
+		      TEXT="netsniff-ng defaults to using scatter/gather pcap file I/O.\n\
 \n\
 For higher performance, you can enable mmap I/O, but this requires more RAM.\n\
 \n\
 Would you like to enable mmap I/O?"
-		YES="Yes, enable mmap I/O!"
-		NO="No, use default scatter/gather I/O."
-		if [ $OUTPUT == "cli" ] ; then
-          dialog --title "$TITLE" --yes-label "$YES" --no-label "$NO" --yesno "$TEXT" 0 0
-      else
-          zenity --question --title="$TITLE" --text="$TEXT" --ok-label="$YES" --cancel-label="$NO" --no-wrap
-      fi
-		ANSWER="$?"
-		if [ $ANSWER -eq 1 ]; then
-			[ $DEBUG -eq 1 ] && echo "DEBUG: Clicked No.  Using scatter/gather."
-		else
-			[ $DEBUG -eq 1 ] && echo "DEBUG: Clicked Yes. Using mmap I/O."
-			PCAP_OPTIONS="--mmap"
-		fi
+		      YES="Yes, enable mmap I/O!"
+		      NO="No, use default scatter/gather I/O."
+		      if [ $OUTPUT == "cli" ] ; then
+                dialog --title "$TITLE" --yes-label "$YES" --no-label "$NO" --yesno "$TEXT" 0 0
+            else
+                zenity --question --title="$TITLE" --text="$TEXT" --ok-label="$YES" --cancel-label="$NO" --no-wrap
+            fi
+		      ANSWER="$?"
+		      if [ $ANSWER -eq 1 ]; then
+			       [ $DEBUG -eq 1 ] && echo "DEBUG: Clicked No.  Using scatter/gather."
+		      else
+			       [ $DEBUG -eq 1 ] && echo "DEBUG: Clicked Yes. Using mmap I/O."
+			       PCAP_OPTIONS="--mmap"
+		      fi
 
-		# Ask for PCAP_RING_SIZE        
-		PCAP_RING_SIZE_CONFIRMED="no"
-		while  [ $PCAP_RING_SIZE_CONFIRMED = "no" ]; do
-          TEXT="How large do you want your PCAP ring buffer?\n\nEach monitoring interface will have the specified amount allocated from RAM\nso be sure your system has enough memory. In the case of 4 sensor interfaces\nand a specified ring buffer of 1GB, 4GB of total RAM will be allocated for packet\nbuffering. For busy networks a ring buffer of at least 256MB is recommended.\n\nPlease enter an integer in Megabytes (MB). The default is 64 MB."
-          promptInput "$TITLE" "$TEXT" "64" "PCAP_RING_SIZE"
-			[ $? = 1 ] && exit
-			COMPRESSED="$(echo $PCAP_RING_SIZE | sed -e 's/[^[:digit:]]//g')"
-			if [ "$COMPRESSED" != "$PCAP_RING_SIZE" ] || [ x$PCAP_RING_SIZE = "x" ]; then
-            TEXT="Invalid MB value! Please use integers only."
-            promptMessage "$TITLE" "$TEXT"
-			else
-				[ $DEBUG -eq 1 ] && echo "DEBUG: PCAP ring size set to $PCAP_RING_SIZE."
-				PCAP_RING_SIZE_CONFIRMED="yes"
-			fi
-		done
-	else
-	# Note about disabling full packet capture
-	YES="Yes, Continue."
-	NO="No, Quit."
-	TEXT="Please note, if you choose not to enable full packet capture, you will not\nbe able to pivot from Sguil to PCAP, or to CapME to retrieve PCAP data.\n\nClick 'Yes' to continue without enabling full packet capture.\n\nOtherwise, click 'No' to exit setup and re-run it to enable the capture of this valuable data."
-   promptOKCancel "$TITLE" "$TEXT" "$YES" "$NO"
+		      # Ask for PCAP_RING_SIZE
+		      PCAP_RING_SIZE_CONFIRMED="no"
+		      while  [ $PCAP_RING_SIZE_CONFIRMED = "no" ]; do
+                TEXT="How large do you want your PCAP ring buffer?\n\nEach monitoring interface will have the specified amount allocated from RAM\nso be sure your system has enough memory. In the case of 4 sensor interfaces\nand a specified ring buffer of 1GB, 4GB of total RAM will be allocated for packet\nbuffering. For busy networks a ring buffer of at least 256MB is recommended.\n\nPlease enter an integer in Megabytes (MB). The default is 64 MB."
+                promptInput "$TITLE" "$TEXT" "64" "PCAP_RING_SIZE"
+			       [ $? = 1 ] && exit
+			       COMPRESSED="$(echo $PCAP_RING_SIZE | sed -e 's/[^[:digit:]]//g')"
+			       if [ "$COMPRESSED" != "$PCAP_RING_SIZE" ] || [ x$PCAP_RING_SIZE = "x" ]; then
+                    TEXT="Invalid MB value! Please use integers only."
+                    promptMessage "$TITLE" "$TEXT"
+			       else
+				        [ $DEBUG -eq 1 ] && echo "DEBUG: PCAP ring size set to $PCAP_RING_SIZE."
+				        PCAP_RING_SIZE_CONFIRMED="yes"
+			       fi
+		      done
+	     else
+	         # Note about disabling full packet capture
+	         YES="Yes, Continue."
+	         NO="No, Quit."
+	         TEXT="Please note, if you choose not to enable full packet capture, you will not\nbe able to pivot from Sguil to PCAP, or to CapME to retrieve PCAP data.\n\nClick 'Yes' to continue without enabling full packet capture.\n\nOtherwise, click 'No' to exit setup and re-run it to enable the capture of this valuable data."
+            promptOKCancel "$TITLE" "$TEXT" "$YES" "$NO"
 
-	# Ask for CRIT_DISK_USAGE
-	CRIT_DISK_USAGE_CONFIRMED="no"
-	while [ $CRIT_DISK_USAGE_CONFIRMED = "no" ]; do
-       TEXT="At what percent of disk usage would you like to begin purging old logs?\n\nPlease enter an integer between 10 and 100.  The default is 90."
-       promptInput "$TITLE" "$TEXT" "90" "CRIT_DISK_USAGE"
-		[ $? = 1 ] && exit
-		COMPRESSED="$(echo $CRIT_DISK_USAGE | sed -e 's/[^[:digit:]]//g')"
-		[ "$COMPRESSED" == "$CRIT_DISK_USAGE" ] && 
-		[ $CRIT_DISK_USAGE -gt 10 ] && 
-		[ $CRIT_DISK_USAGE -lt 100 ] && 
-		CRIT_DISK_USAGE_CONFIRMED="yes" || 
-          (
-              TEXT="Invalid percentage! Please use integers between 0 and 100."
-              promptMessage "$TITLE" "$TEXT"
-          )
-	done
-	let WARN_DISK_USAGE=${CRIT_DISK_USAGE}-10
-	[ $DEBUG -eq 1 ] && echo "DEBUG: CRIT_DISK_USAGE set to $CRIT_DISK_USAGE."
-	fi # End of CUSTOM
+	         # Ask for CRIT_DISK_USAGE
+	         CRIT_DISK_USAGE_CONFIRMED="no"
+	         while [ $CRIT_DISK_USAGE_CONFIRMED = "no" ]; do
+                TEXT="At what percent of disk usage would you like to begin purging old logs?\n\nPlease enter an integer between 10 and 100.  The default is 90."
+                promptInput "$TITLE" "$TEXT" "90" "CRIT_DISK_USAGE"
+		          [ $? = 1 ] && exit
+		          COMPRESSED="$(echo $CRIT_DISK_USAGE | sed -e 's/[^[:digit:]]//g')"
+		          [ "$COMPRESSED" == "$CRIT_DISK_USAGE" ] &&
+		              [ $CRIT_DISK_USAGE -gt 10 ] &&
+		              [ $CRIT_DISK_USAGE -lt 100 ] &&
+		              CRIT_DISK_USAGE_CONFIRMED="yes" ||
+                        (
+                            TEXT="Invalid percentage! Please use integers between 0 and 100."
+                            promptMessage "$TITLE" "$TEXT"
+                        )
+	         done
+	         let WARN_DISK_USAGE=${CRIT_DISK_USAGE}-10
+	         [ $DEBUG -eq 1 ] && echo "DEBUG: CRIT_DISK_USAGE set to $CRIT_DISK_USAGE."
+	     fi # End of CUSTOM
 
-fi # End of ADVANCED SETUP - SENSOR
+    fi # End of ADVANCED SETUP - SENSOR
 
-#########################################
-# Ask whether or not to use SALT
-#########################################
-# Check to see if the securityonion-onionsalt package is installed
-if [ $ADVANCED_SETUP -eq 1 ] && dpkg -l |grep "securityonion-onionsalt" |grep "ii" >/dev/null; then
-	 SALT="yes"
-	 if [ $CUSTOM -eq 1 ]; then
-        TEXT="Salt can be enabled to help manage your entire sensor deployment.\n\
+    #########################################
+    # Ask whether or not to use SALT
+    #########################################
+    # Check to see if the securityonion-onionsalt package is installed
+    if [ $ADVANCED_SETUP -eq 1 ] && dpkg -l |grep "securityonion-onionsalt" |grep "ii" >/dev/null; then
+	     SALT="yes"
+	     if [ $CUSTOM -eq 1 ]; then
+            TEXT="Salt can be enabled to help manage your entire sensor deployment.\n\
 \n\
 By default, Salt will automatically keep the following updated:\n\
 * OS user accounts\n\
@@ -1059,12 +1045,12 @@ Salt can also be used for remote execution, so you can run a command\n\
 and have it execute on all sensors across your deployment.\n\
 \n\
 Would you like to enable Salt?"
-		  YES="Yes, enable Salt!"
-		  NO="No, disable Salt"
-        promptYesNoVar "$TITLE" "$TEXT" "$YES" "$NO" "SALT"
-	 fi
+		      YES="Yes, enable Salt!"
+		      NO="No, disable Salt"
+            promptYesNoVar "$TITLE" "$TEXT" "$YES" "$NO" "SALT"
+	     fi
+    fi
 fi
-
 # End of ADVANCED SETUP
 
 #########################################
@@ -1097,7 +1083,7 @@ Would you like to enable ELSA?"
 			LOG_SIZE_LIMIT_CONFIRMED="no"
 			while [ $LOG_SIZE_LIMIT_CONFIRMED = "no" ]; do
              TEXT="How much disk space (in GigaBytes) should be allocated for ELSA to store logs?\n\nPlease enter an integer greater than 0.  The default is half your disk size.\n\nPlease make sure that the value you set here is less than the size of your disk!\n\nIf you need to adjust this later, you can modify log__size__limit in the /etc/elsa__node.conf file."
-             promptInput "$TITLE" "$TEXT" "" "LOG_SIZE_LIMIT_GB"
+             promptInput "$TITLE" "$TEXT" "$LOG_SIZE_LIMIT_GB" "LOG_SIZE_LIMIT_GB"
 				[ $? = 1 ] && exit
 				if [ x$LOG_SIZE_LIMIT_GB = "x" ]; then
                 promptMessage "$TITLE" "Invalid log size limit! Please use integers greater than 0 and less than your disk size."
@@ -1181,12 +1167,13 @@ else
 fi
 ANSWER="$?"
 if [ $ANSWER -eq 1 ]; then
-        [ $DEBUG -eq 1 ] && echo "DEBUG: Clicked No. Do not proceed."
-        exit
+    [ $DEBUG -eq 1 ] && echo "DEBUG: Clicked No. Do not proceed."
+    exit
 else
-        [ $DEBUG -eq 1 ] && echo "DEBUG: Clicked Yes to proceed with all changes."
+    [ $DEBUG -eq 1 ] && echo "DEBUG: Clicked Yes to proceed with all changes."
 fi
 }
+# end function ask
 
 #########################################
 # Begin function CONFIGURE_SERVICES
@@ -2292,6 +2279,12 @@ done
 # Debug
 #########################################
 [ $DEBUG -eq 1 ] && echo "DEBUG: Debug is enabled.  To disable it, edit the script and change DEBUG to 0."
+[ $DEBUG -eq 1 ] && echo "DEBUG: OUTPUT=$OUTPUT"
+
+# If no X11, then fall back to cli
+[ -z "$DISPLAY" ] && OUTPUT="cli"
+# If user provided an answer file, set to cli
+[ -f "$ANSWERFILE" ] && OUTPUT="cli"
 
 #########################################
 # Got r00t?
@@ -2304,39 +2297,15 @@ if [[ $(/usr/bin/id -u) -ne 0 && "$1" != "-w" ]]; then
     exit
 fi
 
-
-# If no X11, then fall back to cli
-[ -z "$DISPLAY" ] && OUTPUT="cli"
-# If user provided an answer file, set to cli
-[ -f "$ANSWERFILE" ] && OUTPUT="cli"
-
 # If the user didn't provide an answer file, then ask them the questions
 if [ ! -f "$ANSWERFILE" ]; then
-#	if [ "$OUTPUT" = "gui" ] ; then
 	 ask
-: <<END
-	else
-		echo
-		echo "No X display found."
-		echo
-		echo "You'll need to either:"
-		echo
-		echo "- use SSH X-forwarding (ssh -X)"
-		echo
-		echo "OR"
-		echo
-		echo "- use an answer file (sudo sosetup -f sosetup.conf)"
-		echo
-		usage
-		exit 0
-	fi
-END
 else
-	source "$ANSWERFILE"
-	# copy SNIFFING_INTERFACES into INTERFACES
-	INTERFACES="$SNIFFING_INTERFACES"
-	ADVANCED_SETUP="1"
-	if [ $SKIP -ne 1 ];then
+	 source "$ANSWERFILE"
+	 # copy SNIFFING_INTERFACES into INTERFACES
+	 INTERFACES="$SNIFFING_INTERFACES"
+	 ADVANCED_SETUP="1"
+	 if [ $SKIP -ne 1 ];then
 		echo
 		echo "Security Onion Setup"
 		echo
@@ -2351,9 +2320,9 @@ else
 		# If /etc/network/interfaces has not been configured yet, then we need
 		# to run sosetup-network and pass it the answerfile
 		if ! grep "Security Onion" /etc/network/interfaces >/dev/null 2>&1; then
-			/usr/bin/sosetup-network $@
+			 /usr/bin/sosetup-network $@
 		fi
-	fi
+	 fi
 fi
 
 # Perform the requested actions, handling output differently for gui vs cli
