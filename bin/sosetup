@@ -144,6 +144,37 @@ https://github.com/Security-Onion-Solutions/security-onion/wiki/Hardware\n\n\
 Click 'No' to stop setup and adjust the amount of RAM allocated to this machine.\n\
 Otherwise, click 'Yes' to continue."
 
+function promptRadioList () {
+    # Usage: INPUT must be an Array!
+    # INPUT=(TRUE 'Evaluation Mode' FALSE 'Production Mode')
+    # promptRadioList "$TITLE" "$TEXT" "TEST_VAR" "${INPUT[@]}"
+    local TITLE="$1"; shift
+    local TEXT="$1"; shift
+    local VAR_TO_SET="${1}"; shift
+    local INPUT=("${@}");
+    local DIALOGINPUT=()
+
+    if [ $OUTPUT == "cli" ] ; then
+        #need to reverse $INPUT above by pairs: "FALSE eth0 TRUE eth1" => "eth0 off eth1 on"
+        local LEN=${#INPUT[@]}
+        local I=0 J=0
+        for (( I=0 ; I<$LEN-1 ; I+=2)); do
+            DIALOGINPUT[$J]=${INPUT[I+1]}
+            J+=1
+            if [[ "${INPUT[I]}" == "TRUE" ]] ; then DIALOGINPUT[$J]="on" ; else DIALOGINPUT[$J]="off" ; fi
+            J+=1
+        done
+        eval "${VAR_TO_SET}=\"$(dialog --no-items --title "$TITLE" --radiolist "$TEXT" 0 0 0 "${DIALOGINPUT[@]}" 3>&1 1>&2 2>&3 |sed 's/|/ /g')\""
+    else
+        eval "${VAR_TO_SET}=\"$(zenity --list --radiolist --column "Enabled" --column "Item" --hide-header --title="$TITLE" --text="$TEXT" "${INPUT[@]}" |sed 's/|/ /g')\""
+    fi
+    if [ "x${!VAR_TO_SET}" = "x" ]; then
+        [ $DEBUG -eq 1 ] && echo "DEBUG: Clicked Cancel. ${VAR_TO_SET}=\"${!VAR_TO_SET}\". Exiting."
+        exit
+    fi
+    [ $DEBUG -eq 1 ] &&  echo "DEBUG: Selected ${VAR_TO_SET}=${!VAR_TO_SET}."
+}
+
 function promptYesNoVar () {
     # Usage:
     # promptYesNoVar "$TITLE" "$TEXT" "$YES" "$NO" "NAME_OF_VAR_TO_SET"
@@ -281,22 +312,8 @@ and allows you to build a distributed sensor network.  You choose:\n\
 - which IDS ruleset(s) to use (Emerging Threats, Snort VRT, or both)\n\
 - how many processes to run for Snort/Suricata/Bro"
     SETUP=""
-    if [ $OUTPUT == "cli" ] ; then
-        SETUP=$(dialog --no-items --radiolist "TITLE" 0 0 0 "Evaluation Mode" on "Production Mode" off 3>&1 1>&2 2>&3)
-    else
-        SETUP=$(zenity --list --radiolist --column "1" --column "2" --hide-header --title="$TITLE" \
-                       TRUE "Evaluation Mode" FALSE "Production Mode" --text="$TEXT")
-    fi
-
-    echo ">> SETUP: $SETUP"
-
-    if [ $? = 1 ]; then
-	     if [ $DEBUG -eq 1 ]; then
-		      echo "DEBUG: Clicked Cancel.  Exiting." && exit 1
-	     else
-		      exit 1
-	     fi
-    fi
+    INPUT=(TRUE 'Evaluation Mode' FALSE 'Production Mode')
+    promptRadioList "$TITLE" "$TEXT" "SETUP" "${INPUT[@]}"
     [ "$SETUP" == "" ] && exit
     [ "$SETUP" == "Production Mode" ] && ADVANCED_SETUP="1" || ADVANCED_SETUP="0"
     if [ $ADVANCED_SETUP -eq 0 ]; then
@@ -311,36 +328,27 @@ and allows you to build a distributed sensor network.  You choose:\n\
             if grep "Security Onion" /etc/network/interfaces >/dev/null 2>&1 && grep manual /etc/network/interfaces >/dev/null 2>&1; then
 
 			       CONFIGURED_INTERFACES=`awk '/manual/ {print $2}' /etc/network/interfaces | head -1`
-                INPUT=$(for i in $INTERFACES; do
-                            if echo $CONFIGURED_INTERFACES |grep $i >/dev/null 2>&1; then
-                                echo -n "TRUE $i "
-                            else
-                                echo -n "FALSE $i "
-                            fi
-                        done)
+                INPUT=()
+                J=0
+                for i in $INTERFACES; do
+                    if echo $CONFIGURED_INTERFACES |grep $i >/dev/null 2>&1; then
+                        INPUT[$J]="TRUE"; J+=1
+                        INPUT[$J]="$i"; J+=1
+                    else
+                        INPUT[$J]="FALSE"; J+=1
+                        INPUT[$J]="$i"; J+=1
+                    fi
+                done
             else
-                INPUT=$(for i in $INTERFACES; do echo -n "FALSE $i "; done)
+                INPUT=()
+                J=0
+                for i in $INTERFACES; do
+                    INPUT[$J]="FALSE"; J+=1
+                    INPUT[$J]="$i"; J+=1
+                done
             fi
-            if [ $OUTPUT == "cli" ] ; then
-                # need to reverse $INPUT above by pairs: "FALSE eth0 TRUE eth1" => "eth0 off eth1 on"
-                INPUT=$(while read -ra ARR
-                        do
-                            LEN=${#ARR[@]}
-                            for (( I=0 ; I<$LEN ; I+=2)); do
-                                Z=$I
-                                echo -n "${ARR[I+1]} "
-                                if [[ "${ARR[I]}" == "TRUE" ]] ; then echo -n "on " ; else echo -n "off "; fi
-                            done
-                        done <<< "$INPUT")
-                INTERFACES=$(dialog --no-items --title "$TITLE" --radiolist "$TEXT" 0 0 0 $INPUT 3>&1 1>&2 2>&3 |sed 's/|/ /g')
-            else
-                INTERFACES=$(zenity --list --radiolist --column "Enabled" --column "Interface" --hide-header --title="$TITLE" --text="$TEXT" $INPUT |sed 's/|/ /g')
-            fi
-       		if [ "$INTERFACES" = "" ]; then
-                [ $DEBUG -eq 1 ] && echo "DEBUG: Clicked Cancel.  Exiting."
-                exit
-            fi
-            [ $DEBUG -eq 1 ] &&  echo "DEBUG: Selected interfaces $INTERFACES."
+            #eg INPUT=(FALSE eth0 TRUE eth1)
+            promptRadioList "$TITLE" "$TEXT" "SETUP" "${INPUT[@]}"
         fi
 	     SERVER=1
 	     SENSOR=1
