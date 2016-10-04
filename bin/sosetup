@@ -198,12 +198,12 @@ function promptYesNoVar () {
     fi
 }
 
-# An example map function, to use in the example below.
+# TODO - replace all promptYesNoVar with this...
 function map() { local f="$1"; shift; for i in "$@"; do "$f" "$i"; done; }
 function doeval(){ eval "$@" ; }
 function promptYesNoVar2 () {
     : <<EOF
-promptYesNoVar2 "TITLE" "TEXT" "YES" "NO" "${mycommands[@]}"
+promptYesNoVar2 "$TITLE" "$TEXT" "$YES" "$NO" "${mycommands[@]}"
 Requires an array of commands:
 mycommands=(
     'IDS_ENGINE_ENABLED="no"'
