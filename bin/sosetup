@@ -368,11 +368,8 @@ You will need to be able to SSH to the existing Server box with an account with 
 \n\
 Otherwise, choose Standalone to configure both Server and Sensor components on this box."
 
-   if [ $OUTPUT == "cli" ] ; then
-       COMPONENTS=$(dialog --title "$TITLE" --no-items --radiolist "$TEXT" 0 0 0 "Server" on "Sensor" off "Standalone" off 3>&1 1>&2 2>&3)
-   else
-	    COMPONENTS=$(zenity --height=300 --list --radiolist --column="1" --column="2" --hide-header --title="$TITLE" --text="$TEXT" TRUE Server FALSE Sensor FALSE Standalone)
-   fi
+   INPUT=(TRUE Server FALSE Sensor FALSE Standalone)
+   promptRadioList "$TITLE" "$TEXT" "COMPONENTS" "${INPUT[@]}"
    
 	case $COMPONENTS in
        Standalone)
@@ -456,20 +453,8 @@ If you'd like to use the Best Practices defaults, please select Best Practices.\
 \n\
 If you'd like to see all options, choose Custom."
 	CUSTOM=""
-   if [ $OUTPUT == "cli" ] ; then
-       CUSTOM=$(dialog --title "$TITLE" --no-items --radiolist "$TEXT" 0 0 0 "Best Practices" on "Custom" off 3>&1 1>&2 2>&3)
-   else
-	    CUSTOM=$(zenity --list --radiolist --column "1" --column "2" --hide-header --title="$TITLE" \
-               TRUE "Best Practices" FALSE "Custom" --text="$TEXT")
-   fi
-
-	if [ $? = 1 ]; then
-		if [ $DEBUG -eq 1 ]; then
-			echo "DEBUG: Clicked Cancel.  Exiting." && exit 1
-		else
-			exit 1
-		fi
-	fi
+   INPUT=(TRUE "Best Practices" FALSE "Custom")
+   promptRadioList "$TITLE" "$TEXT" "CUSTOM" "${INPUT[@]}"
 	[ "$CUSTOM" == "" ] && exit
 	[ "$CUSTOM" == "Custom" ] && CUSTOM="1" || CUSTOM="0"
 	if [ $CUSTOM -eq 0 ]; then
@@ -589,17 +574,12 @@ if [ $ADVANCED_SETUP -eq 1 ] && [ $SERVER -eq 1 ]; then
 	fi
 	# Ask which IDS engine to use.
 	TEXT="Which IDS Engine would you like to use?"
-   if [ $OUTPUT == "cli" ] ; then
-	    IDS_ENGINE=$(dialog --title "$TITLE" --no-items --radiolist "$TEXT" 0 0 0 "Snort" on "Suricata" off 3>&1 1>&2 2>&3)
-   else
-	    IDS_ENGINE=$(zenity --list --radiolist --column="1" --column="2" --hide-header --title="$TITLE" --text="$TEXT" TRUE Snort FALSE Suricata)
-   fi
-	#[ -z $IDS_ENGINE ]
-	[ $? = 1 ] && [ $DEBUG -eq 1 ] && echo "DEBUG: Clicked Cancel.  Exiting." && exit 1
-        [ $DEBUG -eq 1 ] && echo "DEBUG: Selected $IDS_ENGINE."
+   INPUT=(TRUE Snort FALSE Suricata)
+   promptRadioList "$TITLE" "$TEXT" "IDS_ENGINE" "${INPUT[@]}"
 
 	# Ask which IDS ruleset to use.
 	TEXT="Which IDS ruleset would you like to use?"
+   # cannot use promptRadioList due to use of more than 2x columns
    if [ $OUTPUT == "cli" ] ; then
 	    IDS_RULESET=$(dialog --title "$TITLE" --radiolist "$TEXT" 0 0 0 \
                             "ETOPEN" "Emerging Threats Open (no oinkcode required)" on \
@@ -634,19 +614,8 @@ if [ $ADVANCED_SETUP -eq 1 ] && [ $SERVER -eq 1 ]; then
       promptInput "$TITLE" "$TEXT" "" "OINKCODE"
 		[ $DEBUG -eq 1 ] && echo "DEBUG: Entered Snort VRT oinkcode $OINKCODE"
 	   TEXT="Please choose a VRT policy."
-      if [ $OUTPUT == "cli" ] ; then
-		    VRT_POLICY=$(dialog --title "$TITLE" --no-items --radiolist "$TEXT" 0 0 0 \
-		                        "connectivity" off \
-		                        "balanced" off \
-		                        "security" off \
-                              3>&1 1>&2 2>&3)
-      else
-		    VRT_POLICY=$(zenity --list --radiolist --hide-header --column="1" --column="2" --text="Please choose a VRT policy." --title "$TITLE" \
-		                        FALSE "connectivity" \
-		                        FALSE "balanced" \
-		                        FALSE "security"  )
-      fi
-		[ $DEBUG -eq 1 ] && echo "DEBUG: Selected Snort VRT policy $VRT_POLICY"
+      INPUT=(FALSE "connectivity" FALSE "balanced" FALSE "security")
+      promptRadioList "$TITLE" "$TEXT" "VRT_POLICY" "${INPUT[@]}"
 		IDS_RULESET_ACTION="- Download the Snort VRT ruleset using oinkcode $OINKCODE.\n- Set VRT policy to $VRT_POLICY.\n"
 		;;
 	VRTET)
@@ -689,45 +658,40 @@ if [ $ADVANCED_SETUP -eq 1 ] && [ $SENSOR -eq 1 ]; then
 	 # Ask which interface(s) to listen on
 	 if [ $NUM_INTERFACES -gt 1 ]; then
 	     TEXT="Which network interface(s) should be monitored?\n\nIf you allowed Setup to configure /etc/network/interfaces, your monitor interfaces are already selected."
-		  INTERFACES=`awk '/:/ {print $1}' /proc/net/dev | tr -d ':' |grep -v "^lo$" | sort`
-		  if grep "Security Onion" /etc/network/interfaces >/dev/null 2>&1 && grep manual /etc/network/interfaces >/dev/null 2>&1; then
-		      [ $? = 1 ] && exit 1
-			   CONFIGURED_INTERFACES=`awk '/manual/ {print $2}' /etc/network/interfaces`
-			   INPUT=$(for i in $INTERFACES; do
-					         if echo $CONFIGURED_INTERFACES |grep $i >/dev/null 2>&1; then
-						          echo -n "TRUE $i "
-					         else
-						          echo -n "FALSE $i "
-					         fi
-				        done)
-		  else
-			   INPUT=`for i in $INTERFACES; do echo -n "FALSE $i "; done`
-		  fi
-        if [ $OUTPUT == "cli" ] ; then
-            # need to reverse $INPUT above by pairs: "FALSE eth0 TRUE eth1" => "eth0 off eth1 on"
-            INPUT=$(while read -ra ARR
-                    do
-                        LEN=${#ARR[@]}
-                        for (( I=0 ; I<$LEN ; I+=2)); do
-                            echo -n "${ARR[I+1]} "
-                            if [[ "${ARR[I]}" == "TRUE" ]] ; then echo -n "on " ; else echo -n "off "; fi
-                        done
-                    done <<< "$INPUT")
-            INTERFACES=$(dialog --no-items --title "$TITLE" --radiolist "$TEXT" 0 0 0 $INPUT 3>&1 1>&2 2>&3 |sed 's/|/ /g')
+        INTERFACES=`awk '/:/ {print $1}' /proc/net/dev | tr -d ':' |grep -v "^lo$" | sort`
+        if grep "Security Onion" /etc/network/interfaces >/dev/null 2>&1 && grep manual /etc/network/interfaces >/dev/null 2>&1; then
+			   CONFIGURED_INTERFACES=`awk '/manual/ {print $2}' /etc/network/interfaces | head -1`
+            INPUT=()
+            J=0
+            for i in $INTERFACES; do
+                if echo $CONFIGURED_INTERFACES |grep $i >/dev/null 2>&1; then
+                    INPUT[$J]="TRUE"; J+=1
+                    INPUT[$J]="$i"; J+=1
+                else
+                    INPUT[$J]="FALSE"; J+=1
+                    INPUT[$J]="$i"; J+=1
+                fi
+            done
         else
-            INTERFACES=$(zenity --list --radiolist --column "Enabled" --column "Interface" --hide-header --title="$TITLE" --text="$TEXT" $INPUT |sed 's/|/ /g')
+            INPUT=()
+            J=0
+            for i in $INTERFACES; do
+                INPUT[$J]="FALSE"; J+=1
+                INPUT[$J]="$i"; J+=1
+            done
         fi
-        if [ "$INTERFACES" = "" ]; then
-			   [ $DEBUG -eq 1 ] && echo "DEBUG: Clicked Cancel.  Exiting."
-		      exit
-		  fi
-		  [ $DEBUG -eq 1 ] &&  echo "DEBUG: Selected interfaces $INTERFACES."
+        #eg INPUT=(FALSE eth0 TRUE eth1)
+        promptRadioList "$TITLE" "$TEXT" "SETUP" "${INPUT[@]}"
 	 fi
 	 SENSOR_CONFIRM_1="- Monitor each of the following interfaces:\n"
 	 SENSOR_CONFIRM_2="$INTERFACES\n"
 
 	 # Determine number of cores and use that as a maximum value for IDS/Bro processes to run
-	 LIST=`seq 1 $CALCD_CORES`; SELECTIONS=`for i in $LIST; do echo "FALSE $i"; done`
+	 LIST=`seq 1 $CALCD_CORES`
+    SELECTIONS=()
+    J=0
+    for i in $LIST; do SELECTIONS[$J]="FALSE"; J+=1; SELECTIONS[$J]="$i"; J+=1; done
+    # => fALSE 1 FALSE 2 FALSE 3 .
 
 	 if [ $CUSTOM -eq 1 ]; then
 	     # IDS Engine
@@ -760,20 +724,7 @@ Would you like to enable the IDS Engine?"
 Based on your system's number of CPU cores, it is recommended that you run $CALCD_CORES IDS engine processes per interface.\n\
 \n\
 If you need to change this setting later, change IDS_LB_PROCS in /etc/nsm/HOSTNAME-INTERFACE/sensor.conf"
-        if [ $OUTPUT == "cli" ] ; then
-            # need to reverse $SELECTIONS above by pairs: "FALSE eth0 TRUE eth1" => "eth0 off eth1 on"
-            SELECTIONS=$(while read -ra ARR
-                         do
-                             LEN=${#ARR[@]}
-                             for (( I=0 ; I<$LEN ; I+=2)); do
-                                 echo -n "${ARR[I+1]} "
-                                 if [[ "${ARR[I]}" == "TRUE" ]] ; then echo -n "on " ; else echo -n "off "; fi
-                             done
-                         done <<< "$INPUT")
-            IDS_LB_PROCS=$(dialog --no-items --title "$TITLE" --radiolist "$TEXT" 0 0 0 $SELECTIONS 3>&1 1>&2 2>&3 |sed 's/|/ /g')
-        else
-            IDS_LB_PROCS=$(zenity --list --radiolist --column "" --column "" $SELECTIONS --hide-header --title="$TITLE" --text="$TEXT" )
-        fi
+        promptRadioList "$TITLE" "$TEXT" "IDS_LB_PROCS" "${SELECTIONS[@]}"
 
         if [ "$IDS_LB_PROCS" = "" ]; then
             [ $DEBUG -eq 1 ] && echo "DEBUG: Clicked Cancel.  Exiting."
@@ -853,6 +804,10 @@ Would you like to enable Bro?"
 Based on your system's number of CPU cores, it is recommended that you run $CALCD_CORES Bro processes per interface.
 \n\
 If you need to change this setting later, you can change the lb_procs variable in /opt/bro/etc/node.cfg."
+               # TODO: based on SELECTIONS above, which needs to be an array
+   # INPUT=(TRUE 'Evaluation Mode' FALSE 'Production Mode')
+   # promptRadioList "$TITLE" "$TEXT" "TEST_VAR" "${INPUT[@]}"
+
 		  BRO_LB_PROCS=`zenity --list --radiolist --column "" --column "" $SELECTIONS --hide-header --text="$TEXT" --title="$TITLE"`
 		  if [ "$BRO_LB_PROCS" = "" ]; then
 			   [ $DEBUG -eq 1 ] && echo "DEBUG: Clicked Cancel.  Exiting."
@@ -2042,7 +1997,7 @@ if [ $SERVER -ne 1 ] && [ "$ELSA" = "YES" ]; then
         # Restart the autossh tunnel
         /usr/bin/autossh -M 0 -f -q -N -o "ServerAliveInterval 60" -o "ServerAliveCountMax 3" -i "$KEY" -L 3306:127.0.0.1:3306 -R $ELSA_PORT:localhost:3154 $SSH_USERNAME@$SERVERNAME
     fi
-    if [ "$UPDATE_ELSA_SERVER" = "YES" ]; then
+    if [ "$UPDATE_ELSA_SERVER" = "YES" || "$UPDATE_ELSA_SERVER" = "yes" ]; then
         # Instruct the server to restart apache2.
         # Run the script with sudo
         if [ "$OUTPUT" = "gui" ]; then
@@ -2165,7 +2120,6 @@ https://securityonionsolutions.com'
 
 save()
 {
-	# TODO
 	echo "# ANSWERFILE generated by sosetup -w option" > $WRITEANSWERFILE
 	echo -n "# Generation date: " >> $WRITEANSWERFILE
 	date >> $WRITEANSWERFILE
