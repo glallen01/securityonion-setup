@@ -198,6 +198,36 @@ function promptYesNoVar () {
     fi
 }
 
+# An example map function, to use in the example below.
+function map() { local f="$1"; shift; for i in "$@"; do "$f" "$i"; done; }
+function doeval(){ eval "$@" ; }
+function promptYesNoVar2 () {
+    : <<EOF
+promptYesNoVar2 "TITLE" "TEXT" "YES" "NO" "${mycommands[@]}"
+Requires an array of commands:
+mycommands=(
+    'IDS_ENGINE_ENABLED="no"'
+    'BARNYARD2_ENABLED="no"'
+    'SNORT_AGENT_ENABLED="no"'
+)
+EOF
+    TITLE="$1"; shift; TEXT="$1"; shift; YES="$1"; shift; NO="$1"; shift; COMMANDS=("$@")
+    if [ $OUTPUT == "cli" ] ; then
+        dialog --title "$TITLE" --yes-label "$YES" --no-label "$NO" --yesno "$TEXT" 0 0
+    else
+        zenity --question --title="$TITLE" --text="$TEXT" --ok-label="$YES" --cancel-label="$NO" --no-wrap
+    fi
+    if [ "$?" -eq 1 ]; then
+        lambda(){ doeval "$@"; }; map lambda ${COMMANDS[@]}
+	     [ $DEBUG -eq 1 ] && echo "DEBUG: Clicked No.  \${COMMANDS[@]}=( ${@} )"
+    else
+        lambda(){ doeval "$@"; }; map lambda ${COMMANDS[@]//no/yes}
+	     [ $DEBUG -eq 1 ] && echo "DEBUG: Clicked Yes. \${COMMANDS[@]}=( ${@//no/yes} )"
+    fi
+}
+
+
+
 function promptInput () {
     # Usage:
     # promptInput "$TITLE" "$TEXT" "DEFAULT_VAL" "NAME_OF_VAR_TO_SET"
@@ -691,7 +721,7 @@ if [ $ADVANCED_SETUP -eq 1 ] && [ $SENSOR -eq 1 ]; then
     SELECTIONS=()
     J=0
     for i in $LIST; do SELECTIONS[$J]="FALSE"; J+=1; SELECTIONS[$J]="$i"; J+=1; done
-    # => fALSE 1 FALSE 2 FALSE 3 .
+    # => FALSE 1 FALSE 2 FALSE 3 ...
 
 	 if [ $CUSTOM -eq 1 ]; then
 	     # IDS Engine
@@ -701,20 +731,12 @@ specified on the previous screen and logs IDS alerts.\n\
 Would you like to enable the IDS Engine?"
 	     YES="Yes, enable the IDS Engine!"
 	     NO="No, disable the IDS Engine."
-        if [ $OUTPUT == "cli" ] ; then
-            dialog --title "$TITLE" --yes-label "$YES" --no-label "$NO" --yesno "$TEXT" 0 0
-        else
-            zenity --question --title="$TITLE" --text="$TEXT" --ok-label="$YES" --cancel-label="$NO" --no-wrap
-        fi
-	     ANSWER="$?"
-		  if [ $ANSWER -eq 1 ]; then
-			   [ $DEBUG -eq 1 ] && echo "DEBUG: Clicked No.  Disabling IDS Engine."
-			   IDS_ENGINE_ENABLED="no"
-			   BARNYARD2_ENABLED="no"
-			   SNORT_AGENT_ENABLED="no"
-		  else
-			   [ $DEBUG -eq 1 ] && echo "DEBUG: Clicked Yes.  Enabling IDS Engine."
-		  fi
+        PROMPTCOMMANDS=(
+            'IDS_ENGINE_ENABLED="no"'
+		      'BARNYARD2_ENABLED="no"'
+		      'SNORT_AGENT_ENABLED="no"'
+        )
+        promptYesNoVar2 "$TITLE" "$TEXT" "$YES" "$NO" "${PROMPTCOMMANDS[@]}"
 	 fi
 
 	 # IDS Engine Procs
@@ -774,20 +796,11 @@ If you need to change this setting later, change IDS_LB_PROCS in /etc/nsm/HOSTNA
 Would you like to enable Bro?"
 	     YES="Yes, enable Bro!"
 	     NO="No, disable Bro."
-        if [ $OUTPUT == "cli" ] ; then
-            dialog --title "$TITLE" --yes-label "$YES" --no-label "$NO" --yesno "$TEXT" 0 0
-        else
-            zenity --question --title="$TITLE" --text="$TEXT" --ok-label="$YES" --cancel-label="$NO" --no-wrap
-        fi
-	     ANSWER="$?"
-	     if [ $ANSWER -eq 1 ]; then
-		      [ $DEBUG -eq 1 ] && echo "DEBUG: Clicked No.  Disabling Bro."
-		      BRO_ENABLED="no"
-		      HTTP_AGENT_ENABLED="no"
-	     else
-		      [ $DEBUG -eq 1 ] && echo "DEBUG: Clicked Yes.  Enabling Bro."
-	     fi
-
+        PROMPTCOMMANDS=(
+		      'BRO_ENABLED="no"'
+		      'HTTP_AGENT_ENABLED="no"'
+        )
+        promptYesNoVar2 "$TITLE" "$TEXT" "$YES" "$NO" "${PROMPTCOMMANDS[@]}"
 	     # Bro file extraction
 	     if [ "$BRO_ENABLED" == "yes" ]; then
 		      TEXT="Bro can extract files (EXEs by default) from your network traffic.\n\nIf enabled, EXEs will be stored in /nsm/bro/extracted/.\n\nWould you like to enable file extraction?"
@@ -864,24 +877,12 @@ you may want to disable Prads to avoid duplication of effort.\n\
 Would you like to enable Prads?"
 	     YES="Yes, enable Prads!"
 	     NO="No, disable Prads."
-	     if [ $OUTPUT == "cli" ] ; then
-            dialog --title "$TITLE" --yes-label "$YES" --no-label "$NO" --yesno "$TEXT" 0 0
-        else
-            zenity --question --title="$TITLE" --text="$TEXT" --ok-label="$YES" --cancel-label="$NO" --no-wrap
-        fi
-	     ANSWER="$?"
-	     if [ $ANSWER -eq 1 ]; then
-		      [ $DEBUG -eq 1 ] && echo "DEBUG: Clicked No.  Disabling Prads."
-		      PRADS_ENABLED="no"
-		      PADS_AGENT_ENABLED="no"
-		      SANCP_AGENT_ENABLED="no"
-	     else
-		      [ $DEBUG -eq 1 ] && echo "DEBUG: Clicked Yes.  Enabling Prads."
-		      PRADS_ENABLED="yes"
-		      PADS_AGENT_ENABLED="yes"
-		      SANCP_AGENT_ENABLED="yes"
-	     fi
-
+        PROMPTCOMMANDS=(
+		      'PRADS_ENABLED="no"'
+		      'PADS_AGENT_ENABLED="no"'
+		      'SANCP_AGENT_ENABLED="no"'
+        )
+        promptYesNoVar2 "$TITLE" "$TEXT" "$YES" "$NO" "${PROMPTCOMMANDS[@]}"
 	     # PCAP
 	     TEXT="Full packet capture writes all monitored traffic to disk.\n\
 \n\
@@ -892,20 +893,12 @@ and is therefore highly recommended!\n\
 Would you like to enable full packet capture?"
 	     YES="Yes, enable full packet capture!"
 	     NO="No, disable full packet capture."
-		  if [ $OUTPUT == "cli" ] ; then
-            dialog --title "$TITLE" --yes-label "$YES" --no-label "$NO" --yesno "$TEXT" 0 0
-        else
-            zenity --question --title="$TITLE" --text="$TEXT" --ok-label="$YES" --cancel-label="$NO" --no-wrap
-        fi
-	     ANSWER="$?"
-	     if [ $ANSWER -eq 1 ]; then
-		      [ $DEBUG -eq 1 ] && echo "DEBUG: Clicked No.  Disabling full packet capture."
-		      PCAP_ENABLED="no"
-		      PCAP_AGENT_ENABLED="no"
-	     else
-		      [ $DEBUG -eq 1 ] && echo "DEBUG: Clicked Yes.  Enabling full packet capture."
-	     fi
-
+        PROMPTCOMMANDS=(
+		      'PCAP_ENABLED="no"'
+		      'PCAP_AGENT_ENABLED="no"'
+        )
+        promptYesNoVar2 "$TITLE" "$TEXT" "$YES" "$NO" "${PROMPTCOMMANDS[@]}"
+        
 	     # Ask for PCAP_SIZE
 	     if [ "$PCAP_ENABLED" == "yes" ]; then
 
