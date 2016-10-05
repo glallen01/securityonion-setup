@@ -159,10 +159,10 @@ function promptRadioList () {
         local LEN=${#INPUT[@]}
         local I=0 J=0
         for (( I=0 ; I<$LEN-1 ; I+=2)); do
-            DIALOGINPUT[$J]=${INPUT[I+1]}
-            J+=1
-            if [[ "${INPUT[I]}" == "TRUE" ]] ; then DIALOGINPUT[$J]="on" ; else DIALOGINPUT[$J]="off" ; fi
-            J+=1
+            DIALOGINPUT[$J]=${INPUT[$I+1]}
+            ((J++))
+            if [[ "${INPUT[$I]}" == "TRUE" ]] ; then DIALOGINPUT[$J]="on" ; else DIALOGINPUT[$J]="off" ; fi
+            ((J++))
         done
         eval "${VAR_TO_SET}=\"$(dialog --no-items --title "$TITLE" --radiolist "$TEXT" 0 0 0 "${DIALOGINPUT[@]}" 3>&1 1>&2 2>&3 |sed 's/|/ /g')\""
     else
@@ -362,19 +362,19 @@ and allows you to build a distributed sensor network.  You choose:\n\
                 J=0
                 for i in $INTERFACES; do
                     if echo $CONFIGURED_INTERFACES |grep $i >/dev/null 2>&1; then
-                        INPUT[$J]="TRUE"; J+=1
-                        INPUT[$J]="$i"; J+=1
+                        INPUT[$J]="TRUE"; ((J++))
+                        INPUT[$J]="$i"; ((J++))
                     else
-                        INPUT[$J]="FALSE"; J+=1
-                        INPUT[$J]="$i"; J+=1
+                        INPUT[$J]="FALSE"; ((J++))
+                        INPUT[$J]="$i"; ((J++))
                     fi
                 done
             else
                 INPUT=()
                 J=0
                 for i in $INTERFACES; do
-                    INPUT[$J]="FALSE"; J+=1
-                    INPUT[$J]="$i"; J+=1
+                    INPUT[$J]="FALSE"; ((J++))
+                    INPUT[$J]="$i"; ((J++))
                 done
             fi
             #eg INPUT=(FALSE eth0 TRUE eth1)
@@ -685,33 +685,52 @@ if [ $ADVANCED_SETUP -eq 1 ] && [ $SENSOR -eq 1 ]; then
 		  fi
 	 done
 
+    
 	 # Ask which interface(s) to listen on
 	 if [ $NUM_INTERFACES -gt 1 ]; then
 	     TEXT="Which network interface(s) should be monitored?\n\nIf you allowed Setup to configure /etc/network/interfaces, your monitor interfaces are already selected."
         INTERFACES=`awk '/:/ {print $1}' /proc/net/dev | tr -d ':' |grep -v "^lo$" | sort`
         if grep "Security Onion" /etc/network/interfaces >/dev/null 2>&1 && grep manual /etc/network/interfaces >/dev/null 2>&1; then
-			   CONFIGURED_INTERFACES=`awk '/manual/ {print $2}' /etc/network/interfaces | head -1`
+	   	   CONFIGURED_INTERFACES=`awk '/manual/ {print $2}' /etc/network/interfaces | head -1`
             INPUT=()
             J=0
             for i in $INTERFACES; do
                 if echo $CONFIGURED_INTERFACES |grep $i >/dev/null 2>&1; then
-                    INPUT[$J]="TRUE"; J+=1
-                    INPUT[$J]="$i"; J+=1
+                    INPUT[$J]="TRUE"; ((J++))
+                    INPUT[$J]="$i"; ((J++))
                 else
-                    INPUT[$J]="FALSE"; J+=1
-                    INPUT[$J]="$i"; J+=1
+                    INPUT[$J]="FALSE"; ((J++))
+                    INPUT[$J]="$i"; ((J++))
                 fi
             done
         else
             INPUT=()
             J=0
             for i in $INTERFACES; do
-                INPUT[$J]="FALSE"; J+=1
-                INPUT[$J]="$i"; J+=1
+                INPUT[$J]="FALSE"; ((J++))
+                INPUT[$J]="$i"; ((J++))
             done
         fi
         #eg INPUT=(FALSE eth0 TRUE eth1)
-        promptRadioList "$TITLE" "$TEXT" "SETUP" "${INPUT[@]}"
+        #needs to be a checklist instead of radiolist: promptRadioList "$TITLE" "$TEXT" "SETUP" "${INPUT[@]}"
+        if [ $OUTPUT == "cli" ] ; then
+            local LEN=${#INPUT[@]}
+            local I=0 J=0
+            for (( I=0 ; I<$LEN-1 ; I+=2)); do
+                DIALOGINPUT[$J]=${INPUT[$I+1]}
+                ((J++))
+                if [[ "${INPUT[$I]}" == "TRUE" ]] ; then DIALOGINPUT[$J]="on" ; else DIALOGINPUT[$J]="off" ; fi
+                ((J++))
+            done
+            eval "INTERFACES=\"$(dialog --no-items --title "$TITLE" --checklist "$TEXT" 0 0 0 "${DIALOGINPUT[@]}" 3>&1 1>&2 2>&3 |sed 's/|/ /g')\""
+        else
+            eval "INTERFACES=\"$(zenity --list --checklist --column "Enabled" --column "Interface" --hide-header --title="$TITLE" --text="$TEXT" "${INPUT[@]}" |sed 's/|/ /g')\""
+        fi
+		  if [ "$INTERFACES" = "" ]; then
+			   [ $DEBUG -eq 1 ] && echo "DEBUG: Clicked Cancel.  Exiting."
+		      exit
+		  fi
+		  [ $DEBUG -eq 1 ] &&  echo "DEBUG: Selected interfaces $INTERFACES."
 	 fi
 	 SENSOR_CONFIRM_1="- Monitor each of the following interfaces:\n"
 	 SENSOR_CONFIRM_2="$INTERFACES\n"
@@ -720,7 +739,7 @@ if [ $ADVANCED_SETUP -eq 1 ] && [ $SENSOR -eq 1 ]; then
 	 LIST=`seq 1 $CALCD_CORES`
     SELECTIONS=()
     J=0
-    for i in $LIST; do SELECTIONS[$J]="FALSE"; J+=1; SELECTIONS[$J]="$i"; J+=1; done
+    for i in $LIST; do SELECTIONS[$J]="FALSE"; ((J++)); SELECTIONS[$J]="$i"; ((J++)); done
     # => FALSE 1 FALSE 2 FALSE 3 ...
 
 	 if [ $CUSTOM -eq 1 ]; then
